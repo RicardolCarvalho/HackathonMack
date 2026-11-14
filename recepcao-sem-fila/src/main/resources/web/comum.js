@@ -46,7 +46,7 @@ const ROTULO_STATUS = {
   PRONTO_PARA_CHEGADA: 'Pronto para a chegada',
   ATENDIMENTO_REMOTO: 'Atendimento remoto',
   APOIO_PRESENCIAL: 'Apoio presencial',
-  CONCLUIDO: 'Passagem registrada',
+  CONCLUIDO: 'Chegada registrada',
 };
 
 const ROTULO_RESULTADO = {

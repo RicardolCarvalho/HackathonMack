@@ -4,12 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Check-in | Recepção Sem Fila</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/estilo.css">
 </head>
 <body>
   <header class="topo">
-    <strong>Recepção Sem Fila</strong>
-    <a href="/atendimento" target="_blank" rel="noopener">Abrir painel de atendimento</a>
+    <span class="marca-nome"><span class="logo" aria-hidden="true">✓</span>Recepção Sem Fila</span>
+    <a href="/atendimento" target="_blank" rel="noopener">Painel de atendimento ↗</a>
   </header>
   <div class="aviso-sintetico">Demonstração com dados sintéticos. Não envie documentos reais.</div>
 
@@ -19,12 +22,15 @@
   </main>
 
   <div class="ajuda-fixa" id="barra-ajuda" hidden>
-    <button class="secundario" id="abrir-ajuda">Falar com uma pessoa</button>
+    <div class="dentro">
+      <span>Algo não está certo?</span>
+      <button class="secundario" id="abrir-ajuda">Falar com uma pessoa</button>
+    </div>
   </div>
 
   <dialog id="dialogo-ajuda" aria-labelledby="titulo-ajuda">
     <h2 id="titulo-ajuda">Falar com uma pessoa</h2>
-    <p>Você recebe uma senha de apoio e alguém da recepção atende você no balcão. Seu check-in fica guardado, sem perder o que já foi feito.</p>
+    <p class="suave">Você recebe uma senha de apoio e alguém da recepção atende você no balcão. Seu check-in fica guardado, sem perder o que já foi feito.</p>
     <div class="campo">
       <label for="motivo-ajuda">O que aconteceu? (opcional)</label>
       <textarea id="motivo-ajuda" maxlength="200"></textarea>

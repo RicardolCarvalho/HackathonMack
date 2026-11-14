@@ -1,6 +1,6 @@
 // Tela do paciente: desenha a etapa atual a partir do estado do check-in devolvido pela API.
 
-const ETAPAS = ['Documento', 'Cadastro', 'Guia', 'Passagem'];
+const ETAPAS = ['Documentos', 'Cadastro', 'Guia', 'Chegada'];
 const CHAVE = 'recepcao-sem-fila.checkin';
 
 let checkIn = null;
@@ -27,6 +27,7 @@ async function executar(acao) {
   }
   ocupado = false;
   desenhar();
+  window.scrollTo({ top: 0 });
 }
 
 const comecar = () => executar(() => api('POST', '/api/checkins'));
@@ -59,7 +60,12 @@ function novoCheckIn() {
   desenhar();
 }
 
-document.getElementById('abrir-ajuda').addEventListener('click', () => dialogoAjuda.showModal());
+function abrirAjuda(motivo) {
+  document.getElementById('motivo-ajuda').value = motivo || '';
+  dialogoAjuda.showModal();
+}
+
+document.getElementById('abrir-ajuda').addEventListener('click', () => abrirAjuda());
 document.getElementById('cancelar-ajuda').addEventListener('click', () => dialogoAjuda.close());
 document.getElementById('confirmar-ajuda').addEventListener('click', () => {
   const motivo = document.getElementById('motivo-ajuda').value;
@@ -75,7 +81,7 @@ function desenhar() {
   const status = checkIn ? checkIn.status : null;
   const partes = [];
 
-  if (erro) partes.push(el('div', { class: 'quadro pendencia', role: 'alert' }, el('p', { class: 'erro' }, erro)));
+  if (erro) partes.push(el('div', { class: 'alerta', role: 'alert' }, erro));
 
   if (!checkIn) partes.push(telaInicio());
   else if (status === 'AGUARDANDO_DOCUMENTOS') partes.push(telaDocumentos());
@@ -111,114 +117,201 @@ function desenharTrilha() {
   }
   document.getElementById('trilha').replaceChildren(...ETAPAS.map((nome, i) => {
     const classe = i < atual ? 'feita' : i === atual ? (parada ? 'parada' : 'atual') : '';
-    return el('li', { class: classe, 'aria-current': i === atual ? 'step' : null }, nome);
+    const simbolo = i < atual ? '✓' : i === atual && parada ? '!' : String(i + 1);
+    return el('li', { class: classe, 'aria-current': i === atual ? 'step' : null },
+      el('span', { class: 'ponto', 'aria-hidden': 'true' }, simbolo),
+      el('span', { class: 'nome' }, nome));
   }));
+}
+
+/** "ANA BEATRIZ LIMA SOUZA" -> "Ana". */
+function primeiroNome(nome) {
+  if (!nome) return '';
+  const p = nome.trim().split(/\s+/)[0].toLowerCase();
+  return p.charAt(0).toUpperCase() + p.slice(1);
 }
 
 function telaInicio() {
   return el('section', { class: 'quadro' },
+    el('div', { class: 'rotulo' }, 'Check-in antecipado'),
     el('h1', {}, 'Faça seu check-in antes de chegar'),
-    el('p', {}, 'Envie seu documento e sua carteirinha, confira a guia e, ao chegar, retire sua senha sem passar pela fila da recepção.'),
-    el('p', { class: 'suave pequeno' }, 'Se algo não conferir, uma pessoa do atendimento assume o seu caso. Você pode pedir ajuda a qualquer momento.'),
-    el('button', { class: 'largo', onclick: comecar, disabled: ocupado }, 'Começar check-in'));
+    el('p', { class: 'suave' }, 'Em poucos minutos, sem fila na recepção.'),
+    el('ol', { class: 'passos' },
+      el('li', {}, el('div', {}, el('strong', {}, 'Envie documento e carteirinha'),
+        el('span', { class: 'suave pequeno' }, 'Conferimos seus dados com o cadastro do hospital.'))),
+      el('li', {}, el('div', {}, el('strong', {}, 'Confirme a guia'),
+        el('span', { class: 'suave pequeno' }, 'Veja se é a guia da sua consulta de hoje.'))),
+      el('li', {}, el('div', {}, el('strong', {}, 'Ao chegar, receba sua senha'),
+        el('span', { class: 'suave pequeno' }, 'E siga direto para o atendimento.')))),
+    el('button', { class: 'largo', onclick: comecar, disabled: ocupado }, ocupado ? 'Começando…' : 'Começar check-in'),
+    el('p', { class: 'nota' }, 'Se algo não conferir, uma pessoa do atendimento assume o seu caso. Você pode pedir ajuda a qualquer momento.'));
 }
 
 function telaDocumentos() {
   return el('section', { class: 'quadro' },
+    el('div', { class: 'rotulo' }, 'Etapa 1 de 4 · Documentos'),
     el('h1', {}, 'Envie seu documento e sua carteirinha'),
-    el('h2', {}, 'Documentos fictícios da demonstração'),
-    el('p', { class: 'suave pequeno' }, 'Escolha um par de documentos. O texto ao lado é o roteiro da demo e não aparece para um paciente real.'),
+    el('p', { class: 'suave' }, ocupado ? 'Conferindo seus documentos…' : 'Escolha um dos pares de documentos fictícios da demonstração.'),
+    el('p', { class: 'nota' }, 'O texto ao lado de cada par é o roteiro da demo e não aparece para um paciente real.'),
     el('div', { class: 'kits' }, kits.map((kit) =>
       el('button', { class: 'kit', onclick: () => enviarKit(kit), disabled: ocupado },
         el('span', { class: 'miniaturas' },
           el('img', { src: kit.identidadeUrl, alt: 'Documento de identidade fictício' }),
           el('img', { src: kit.carteirinhaUrl, alt: 'Carteirinha fictícia' })),
-        el('span', {}, el('strong', {}, kit.titulo), el('span', { class: 'suave pequeno' }, kit.resumo))))),
-    el('h2', {}, 'Ou envie seus arquivos'),
+        el('span', {}, el('strong', {}, kit.titulo), el('span', { class: 'suave pequeno' }, kit.resumo)),
+        el('span', { class: 'seta', 'aria-hidden': 'true' }, '→')))),
+    el('div', { class: 'divisor' }, 'ou envie seus arquivos'),
     el('p', { class: 'suave pequeno' }, 'O leitor desta demonstração entende os documentos fictícios em SVG. Para testar o envio, salve um dos modelos (por exemplo /api/kits/ana/identidade.svg e /api/kits/ana/carteirinha.svg). Outro tipo de arquivo é encaminhado para uma pessoa conferir.'),
-    el('div', { class: 'campo' },
-      el('label', { for: 'arquivo-identidade' }, 'Documento de identidade'),
-      el('input', { type: 'file', id: 'arquivo-identidade', accept: '.svg,image/svg+xml' })),
-    el('div', { class: 'campo' },
-      el('label', { for: 'arquivo-carteirinha' }, 'Carteirinha do convênio'),
-      el('input', { type: 'file', id: 'arquivo-carteirinha', accept: '.svg,image/svg+xml' })),
+    el('div', {},
+      el('div', { class: 'campo' },
+        el('label', { for: 'arquivo-identidade' }, 'Documento de identidade'),
+        el('input', { type: 'file', id: 'arquivo-identidade', accept: '.svg,image/svg+xml' })),
+      el('div', { class: 'campo' },
+        el('label', { for: 'arquivo-carteirinha' }, 'Carteirinha do convênio'),
+        el('input', { type: 'file', id: 'arquivo-carteirinha', accept: '.svg,image/svg+xml' }))),
     el('button', { class: 'secundario largo', onclick: enviarArquivos, disabled: ocupado }, 'Enviar arquivos'));
 }
 
 function telaGuia() {
   const g = checkIn.guia;
   const a = checkIn.agendamento;
-  return el('section', { class: 'quadro livre' },
-    el('h1', {}, 'Tudo conferido. Confirme a guia'),
-    el('p', {}, `${checkIn.nomeLido}, seus dados conferem com o cadastro. Veja se a guia abaixo é a do atendimento de hoje.`),
-    el('dl', { class: 'dados' },
-      el('dt', {}, 'Guia'), el('dd', {}, g.numero),
-      el('dt', {}, 'Procedimento'), el('dd', {}, g.procedimento),
-      el('dt', {}, 'Convênio'), el('dd', {}, g.convenio),
-      el('dt', {}, 'Válida até'), el('dd', {}, dataBr(g.validade)),
-      el('dt', {}, 'Agendamento'), el('dd', {}, `${a.servico}, hoje às ${a.horario}`)),
-    el('button', { class: 'livre largo', onclick: confirmarGuia, disabled: ocupado }, 'Confirmar guia'),
-    el('p', { class: 'suave pequeno' }, 'A guia não é essa? Use "Falar com uma pessoa" aqui embaixo.'));
+  const nome = primeiroNome(checkIn.nomeLido);
+  const guiaOk = checkIn.verificacoes.some((v) => v.codigo === 'GUIA' && v.resultado === 'OK');
+  return el('section', { class: 'quadro' },
+    el('div', { class: 'rotulo' }, 'Etapa 3 de 4 · Guia'),
+    el('h1', {}, 'Esta é a guia da sua consulta de hoje?'),
+    el('p', { class: 'suave' }, `${nome ? nome + ', seus' : 'Seus'} documentos e seu cadastro conferem. Confira a guia antes de seguir.`),
+    el('div', { class: 'guia' },
+      el('div', { class: 'guia-topo' },
+        el('span', { class: 'rotulo' }, g.convenio || 'Convênio'),
+        guiaOk ? el('span', { class: 'selo livre' }, '✓ Autorizada') : null),
+      el('div', { class: 'guia-procedimento' }, g.procedimento),
+      el('dl', { class: 'guia-dados' },
+        el('div', {}, el('dt', {}, 'Horário'), el('dd', {}, a ? `Hoje, ${a.horario}` : '—')),
+        el('div', {}, el('dt', {}, 'Nº da guia'), el('dd', {}, g.numero)),
+        el('div', {}, el('dt', {}, 'Válida até'), el('dd', {}, dataBr(g.validade))))),
+    el('div', { class: 'botoes' },
+      el('button', { class: 'largo', onclick: confirmarGuia, disabled: ocupado }, ocupado ? 'Confirmando…' : 'Sim, é esta guia'),
+      el('button', { class: 'secundario largo', onclick: () => abrirAjuda('A guia mostrada não é a da minha consulta de hoje.'), disabled: ocupado }, 'Não é esta guia')));
 }
 
 function telaPronto() {
   const liberado = checkIn.atendidoPor;
-  return el('section', { class: 'quadro livre' },
-    el('h1', {}, liberado ? 'Pendência resolvida' : 'Pré-check-in concluído'),
-    el('p', {}, liberado
+  const a = checkIn.agendamento;
+  return el('section', { class: 'quadro' },
+    el('div', { class: 'rotulo' }, 'Etapa 4 de 4 · Chegada'),
+    el('h1', {}, 'Tudo pronto. Agora é só chegar'),
+    el('p', { class: 'suave' }, liberado
       ? `${liberado}, do atendimento, conferiu seu caso e liberou o check-in.`
-      : `Levou ${segundos(checkIn.tempoAteDesfechoSeg)} e você não precisou passar pela recepção.`),
-    el('p', {}, 'Quando chegar ao hospital, confirme a chegada para receber sua senha.'),
-    el('button', { class: 'livre largo', onclick: registrarChegada, disabled: ocupado }, 'Confirmar chegada'));
+      : `Você fez o check-in em ${segundos(checkIn.tempoAteDesfechoSeg)} e não vai precisar passar pela fila da recepção.`),
+    a ? el('div', { class: 'agenda' },
+      el('div', { class: 'hora' }, el('small', {}, 'Hoje'), a.horario),
+      el('div', { class: 'descricao' }, el('strong', {}, a.servico),
+        checkIn.guia ? el('div', { class: 'suave pequeno' }, `Guia ${checkIn.guia.numero}`) : null)) : null,
+    el('ol', { class: 'passos' },
+      el('li', {}, el('div', {}, el('strong', {}, 'Vá até o hospital'))),
+      el('li', {}, el('div', {}, el('strong', {}, 'Toque em “Cheguei ao hospital”'),
+        el('span', { class: 'suave pequeno' }, 'Só quando você já estiver lá.'))),
+      el('li', {}, el('div', {}, el('strong', {}, 'Receba sua senha'),
+        el('span', { class: 'suave pequeno' }, 'Ela aparece aqui, com o local para onde seguir.')))),
+    el('button', { class: 'largo', onclick: registrarChegada, disabled: ocupado }, ocupado ? 'Registrando…' : 'Cheguei ao hospital'));
 }
 
 function telaConcluido() {
   const etapa = checkIn.agendamento ? checkIn.agendamento.proximaEtapa : null;
   const presencial = checkIn.senha && checkIn.senha.startsWith('P-');
   return el('section', { class: 'quadro' },
-    el('h1', {}, 'Chegada confirmada'),
+    el('div', { class: 'rotulo' }, 'Chegada confirmada'),
+    el('h1', {}, presencial ? 'Atendimento registrado' : 'Esta é a sua senha'),
     presencial
       ? el('p', {}, `${checkIn.atendidoPor || 'A recepção'} registrou sua passagem no balcão.`)
       : el('div', { class: 'bilhete' },
-          el('div', {}, 'Sua senha'),
+          el('div', { class: 'titulo' }, 'Sua senha'),
           el('div', { class: 'numero' }, checkIn.senha),
-          el('div', { class: 'destino' }, etapa ? `Siga para: ${etapa}` : 'Siga a orientação da recepção')),
+          el('div', { class: 'destino' }, 'Siga para', el('strong', {}, etapa || 'a orientação da recepção'))),
     el('p', { class: 'suave pequeno' }, `Tempo total do check-in: ${segundos(checkIn.tempoTotalSeg)}.`),
     el('button', { class: 'secundario largo', onclick: novoCheckIn }, 'Começar outro check-in'));
 }
 
 function telaRemoto() {
-  return el('section', { class: 'quadro pendencia' },
+  return el('section', { class: 'quadro' },
+    el('span', { class: 'selo pendencia' }, 'Com uma pessoa do atendimento'),
     el('h1', {}, 'Uma pessoa vai conferir seu caso'),
-    el('p', {}, 'Encontramos uma pendência que o sistema não resolve sozinho. O atendimento remoto já recebeu seu check-in com tudo o que você enviou. Você não precisa refazer nada.'),
-    el('ul', {}, checkIn.motivos.map((m) => el('li', {}, m))),
-    el('p', { class: 'suave pequeno' }, 'Esta tela atualiza sozinha quando o atendimento responder.'));
+    el('p', { class: 'suave' }, 'Encontramos uma pendência que o sistema não resolve sozinho. O atendimento remoto já recebeu tudo o que você enviou. Você não precisa refazer nada.'),
+    el('ul', { class: 'motivos' }, checkIn.motivos.map((m) => el('li', {}, m))),
+    el('p', { class: 'aguardando' }, 'Esta tela atualiza sozinha quando o atendimento responder.'));
 }
 
 function telaPresencial() {
   return el('section', { class: 'quadro' },
+    el('div', { class: 'rotulo' }, 'Apoio presencial'),
     el('h1', {}, 'Procure o balcão de apoio'),
-    el('p', {}, checkIn.ajudaPedidaPeloPaciente
+    el('p', { class: 'suave' }, checkIn.ajudaPedidaPeloPaciente
       ? 'Seu pedido foi registrado. Uma pessoa da recepção vai atender você.'
       : `${checkIn.atendidoPor || 'O atendimento'} pediu que seu caso seja concluído no balcão, com uma pessoa.`),
-    el('div', { class: 'bilhete' },
-      el('div', {}, 'Senha de apoio'),
+    el('div', { class: 'bilhete apoio' },
+      el('div', { class: 'titulo' }, 'Senha de apoio'),
       el('div', { class: 'numero' }, checkIn.senha),
-      el('div', { class: 'destino' }, 'Balcão de apoio da recepção')),
-    el('p', { class: 'suave pequeno' }, 'O que você já enviou está com a recepção. Esta tela atualiza sozinha.'));
+      el('div', { class: 'destino' }, 'Siga para', el('strong', {}, 'Balcão de apoio da recepção'))),
+    el('p', { class: 'aguardando' }, 'O que você já enviou está com a recepção. Esta tela atualiza sozinha.'));
 }
 
+// ---------- O que foi conferido ----------
+
+const GRUPOS_CONFERENCIA = [
+  { titulo: 'Documentos enviados', codigos: ['LEITURA_IDENTIDADE', 'LEITURA_CARTEIRINHA', 'IDENTIDADE_SIMULADA'] },
+  { titulo: 'Seus dados no cadastro', codigos: ['CADASTRO_LOCALIZADO', 'NOME', 'NASCIMENTO', 'CARTEIRINHA'] },
+  { titulo: 'Atendimento de hoje', codigos: ['AGENDAMENTO', 'GUIA'] },
+];
+
+const RESUMO_RESULTADO = {
+  OK: ['confere', 'conferem'],
+  DIVERGENTE: ['divergente', 'divergentes'],
+  AUSENTE: ['dado ausente', 'dados ausentes'],
+  SIMULADO: ['simulado', 'simulados'],
+  NAO_AVALIADO: ['não avaliado', 'não avaliados'],
+};
+
+const falhou = (v) => v.resultado === 'DIVERGENTE' || v.resultado === 'AUSENTE';
+
 function quadroConferencia() {
-  return el('section', { class: 'quadro' },
-    el('h2', {}, 'O que foi conferido'),
-    el('ul', { class: 'conferencia' }, checkIn.verificacoes.map((v) =>
-      el('li', {},
-        el('span', { class: 'marca ' + v.resultado, title: ROTULO_RESULTADO[v.resultado] }, SIMBOLO_RESULTADO[v.resultado]),
-        el('div', {},
-          el('strong', {}, v.titulo), ' ', el('span', { class: 'suave pequeno' }, ROTULO_RESULTADO[v.resultado]),
-          el('div', { class: 'pequeno' }, v.detalhe),
-          v.valorLido ? el('div', { class: 'pequeno' }, 'Lido no documento: ' + v.valorLido) : null,
-          el('div', { class: 'suave pequeno' }, 'Fonte: ' + v.fonte))))));
+  const vs = checkIn.verificacoes;
+  const conta = {};
+  for (const v of vs) conta[v.resultado] = (conta[v.resultado] || 0) + 1;
+
+  // Agrupa por etapa; o que não estiver mapeado vai para "Outras conferências".
+  const conhecidos = new Set(GRUPOS_CONFERENCIA.flatMap((g) => g.codigos));
+  const grupos = GRUPOS_CONFERENCIA
+    .map((g) => ({ titulo: g.titulo, itens: vs.filter((v) => g.codigos.includes(v.codigo)) }))
+    .concat([{ titulo: 'Outras conferências', itens: vs.filter((v) => !conhecidos.has(v.codigo)) }])
+    .filter((g) => g.itens.length);
+
+  return el('details', { class: 'quadro conferido', open: true },
+    el('summary', {},
+      el('div', { class: 'cabeca' },
+        el('div', { class: 'rotulo' }, `Conferência · ${vs.length} itens`),
+        el('span', { class: 'alternar', 'aria-hidden': 'true' })),
+      el('h2', {}, 'O que foi conferido'),
+      el('p', { class: 'explica' }, 'Cada item mostra o que foi lido no seu documento e de onde veio o dado.'),
+      el('div', { class: 'contagem' }, ['OK', 'DIVERGENTE', 'AUSENTE', 'SIMULADO', 'NAO_AVALIADO']
+        .filter((r) => conta[r])
+        .map((r) => el('span', { class: r, 'data-simbolo': SIMBOLO_RESULTADO[r] },
+          `${conta[r]} ${RESUMO_RESULTADO[r][conta[r] === 1 ? 0 : 1]}`)))),
+    el('div', { class: 'grupos' }, grupos.map((g) =>
+      el('section', { class: 'grupo' },
+        el('h3', { class: 'rotulo' }, g.titulo),
+        el('ul', { class: 'itens' }, g.itens.map(itemConferencia))))));
+}
+
+function itemConferencia(v) {
+  return el('li', { class: 'item' + (falhou(v) ? ' falhou' : '') },
+    el('span', { class: 'marca ' + v.resultado, 'aria-hidden': 'true' }, SIMBOLO_RESULTADO[v.resultado]),
+    el('div', { class: 'item-titulo' }, v.titulo),
+    el('span', { class: 'estado ' + v.resultado }, ROTULO_RESULTADO[v.resultado]),
+    el('div', { class: 'item-detalhe' }, v.detalhe),
+    el('dl', { class: 'item-meta' },
+      v.valorLido ? el('div', { class: 'lido' }, el('dt', {}, 'Lido'), el('dd', {}, v.valorLido)) : null,
+      el('div', {}, el('dt', {}, 'Fonte'), el('dd', {}, v.fonte))));
 }
 
 // ---------- Estado ----------
