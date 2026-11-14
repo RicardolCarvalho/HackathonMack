@@ -110,8 +110,25 @@ public final class ContasSinteticas {
         return base.horarios(c.paciente().id(), dia, hoje, agora);
     }
 
+    public List<BaseSintetica.Horario> horarios(Conta c, LocalDate dia, LocalDate hoje, LocalTime agora, String hospitalId) {
+        return base.horarios(c.paciente().id(), dia, hoje, agora, hospitalId);
+    }
+
+    public Agendamento agendar(Conta c, LocalDate dia, String horario, String hospitalId) {
+        return base.agendar(c.paciente().id(), dia, horario, hospitalId);
+    }
+
     public Agendamento agendar(Conta c, LocalDate dia, String horario) {
         return base.agendar(c.paciente().id(), dia, horario);
+    }
+
+    public Optional<Agendamento> visitaDoTipo(Conta c, String tipo, LocalDate hoje) { return base.visitaDoTipo(c.paciente().id(), tipo, hoje); }
+    public List<Agendamento> visitas(Conta c, LocalDate hoje) { return base.visitas(c.paciente().id(), hoje); }
+
+    public List<Agendamento> exames(Conta c, LocalDate hoje) { return base.exames(c.paciente().id(), hoje); }
+    public Agendamento selecionarExame(Conta c, String id, LocalDate hoje) { return base.selecionarExame(c.paciente().id(), id, hoje); }
+    public Agendamento preverChegada(Conta c, LocalDate dia, String horario, String hospitalId) {
+        return base.preverChegada(c.paciente().id(), dia, horario, hospitalId);
     }
 
     public void reiniciarAgenda() { base.reiniciarAgenda(); }

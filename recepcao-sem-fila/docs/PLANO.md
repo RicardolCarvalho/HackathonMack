@@ -2,6 +2,13 @@
 
 Complementa o brief da equipe. Onde não há evidência, está marcado como hipótese.
 
+## Escolha inicial
+
+Antes dos hospitais, o paciente escolhe **Exames agendados** ou **Pronto-socorro**. No primeiro caminho,
+local, data e horário vêm do exame fictício marcado pela unidade e o paciente segue direto ao pré-cadastro.
+No segundo, a seleção do hospital e do horário representa somente previsão de chegada, sem reserva de vaga
+ou prioridade clínica. O pré-cadastro é administrativo e não substitui a avaliação presencial.
+
 ## Microjornada
 
 | | |
@@ -27,7 +34,7 @@ ATENDIMENTO_REMOTO ─(pendência de documento: paciente reenvia e a nova confer
                    (até 2 reenvios; se ainda falhar, continua com a pessoa)
 ```
 
-Agenda: o paciente entra sem visita marcada e escolhe o dia (hoje e os próximos 6) e um horário livre da agenda
+Agenda: primeiro o paciente escolhe um dos três hospitais fictícios, com endereço visível. A disponibilidade é por hospital e serviço, e a unidade acompanha a visita e o check-in. O paciente entra sem visita marcada e escolhe o dia (hoje e os próximos 6) e um horário livre da agenda
 sintética do serviço do pedido. O check-in só começa com a visita marcada. Ele pode trocar o dia ou o horário
 depois; um check-in em aberto passa a usar a nova visita, desde que a guia e a carteirinha conferidas continuem
 válidas no novo dia. O portal não mostra o local do atendimento (sala, guichê), e a chegada só é aceita no dia

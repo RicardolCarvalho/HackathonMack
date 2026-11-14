@@ -130,14 +130,25 @@ public final class Servidor {
         }
         if (post && p.length == 4 && p[1].equals("contas") && p[3].equals("agendamento")) {
             Map<String, Object> corpo = corpo(ex);
-            json(ex, 200, servico.agendar(p[2], texto(corpo, "dia"), texto(corpo, "horario")));
+            json(ex, 200, servico.agendar(p[2], texto(corpo, "dia"), texto(corpo, "horario"), texto(corpo, "hospitalId")));
+            return;
+        }
+
+        if (post && p.length == 4 && p[1].equals("contas") && p[3].equals("exame")) {
+            Map<String, Object> corpo = corpo(ex);
+            json(ex, 200, servico.selecionarExame(p[2], texto(corpo, "exameId")));
+            return;
+        }
+        if (post && p.length == 4 && p[1].equals("contas") && p[3].equals("previsao")) {
+            Map<String, Object> corpo = corpo(ex);
+            json(ex, 200, servico.preverChegada(p[2], texto(corpo, "dia"), texto(corpo, "horario"), texto(corpo, "hospitalId")));
             return;
         }
 
         // Jornada do paciente
         if (post && p.length == 2 && p[1].equals("checkins")) {
             Map<String, Object> corpo = corpo(ex);
-            json(ex, 201, servico.iniciar(texto(corpo, "contaId")).paraMapa(false));
+            json(ex, 201, servico.iniciar(texto(corpo, "contaId"), texto(corpo, "tipo")).paraMapa(false));
             return;
         }
         if (p.length >= 3 && p[1].equals("checkins")) {

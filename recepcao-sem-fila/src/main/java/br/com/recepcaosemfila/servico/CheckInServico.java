@@ -168,19 +168,52 @@ public final class CheckInServico {
         m.put("primeiroNome", c.primeiroNome());
         m.put("kitId", c.kitId());
         m.put("hoje", hoje);
+        m.put("exames", contas.exames(c, hoje).stream().map(a -> Map.of(
+                "id", a.id(), "data", a.data().toString(), "horario", a.horario(), "servico", a.servico(),
+                "hospitalId", a.hospitalId(), "hospital", mapaHospital(a.hospitalId()), "tipo", a.tipo())).toList());
+        List<Map<String, Object>> previsoes = new ArrayList<>();
+        for (LocalDate dia : BaseSintetica.diasDaAgenda(hoje)) {
+            List<Map<String, Object>> horarios = new ArrayList<>();
+            for (String horario : BaseSintetica.GRADE) {
+                if (dia.equals(hoje) && !LocalTime.parse(horario).isAfter(agora)) continue;
+                horarios.add(Map.of("horario", horario, "disponivel", true, "atual", false));
+            }
+            previsoes.add(Map.of("data", dia, "horarios", horarios));
+        }
+        m.put("previsoes", previsoes);
         m.put("servico", contas.pedido(c).map(BaseSintetica.Pedido::servico).orElse(null));
         m.put("visita", contas.visita(c, hoje).map(a -> {
             Map<String, Object> v = new LinkedHashMap<>();
+            v.put("tipo", a.tipo());
             v.put("data", a.data());
             v.put("horario", a.horario());
             v.put("servico", a.servico());
+            v.put("hospitalId", a.hospitalId());
+            v.put("hospital", mapaHospital(a.hospitalId()));
             v.put("horarioPassou", a.data().equals(hoje) && !LocalTime.parse(a.horario()).isAfter(agora));
             return v;
         }).orElse(null));
+        Map<String, Object> visitas = new LinkedHashMap<>();
+        for (Agendamento a : contas.visitas(c, hoje)) {
+            visitas.put(a.tipo(), Map.of("tipo", a.tipo(), "data", a.data().toString(), "horario", a.horario(),
+                    "servico", a.servico(), "hospitalId", a.hospitalId(), "hospital", mapaHospital(a.hospitalId()),
+                    "horarioPassou", a.data().equals(hoje) && !LocalTime.parse(a.horario()).isAfter(agora)));
+        }
+        m.put("visitas", visitas);
+        Map<String, String> ativos = new LinkedHashMap<>();
+        for (CheckIn ativo : checkIns.values()) {
+            if (c.id().equals(ativo.contaId) && ativo.status != CONCLUIDO && ativo.agendamento != null) {
+                ativos.put(ativo.agendamento.tipo(), ativo.id);
+            }
+        }
+        m.put("checkinsAtivos", ativos);
+        m.put("hospitais", BaseSintetica.HOSPITAIS.stream().map(h -> mapaHospital(h.id())).toList());
+        Map<String, Object> agendas = new LinkedHashMap<>();
+        for (BaseSintetica.Hospital hospital : BaseSintetica.HOSPITAIS) {
         List<Map<String, Object>> agenda = new ArrayList<>();
         for (LocalDate dia : BaseSintetica.diasDaAgenda(hoje)) {
             List<Map<String, Object>> horarios = new ArrayList<>();
-            for (BaseSintetica.Horario h : contas.horarios(c, dia, hoje, agora)) {
+            for (BaseSintetica.Horario h : contas.horarios(c, dia, hoje, agora, hospital.id())) {
                 Map<String, Object> hm = new LinkedHashMap<>();
                 hm.put("horario", h.horario());
                 hm.put("disponivel", h.disponivel());
@@ -192,7 +225,11 @@ public final class CheckInServico {
             d.put("horarios", horarios);
             agenda.add(d);
         }
-        m.put("agenda", agenda);
+        agendas.put(hospital.id(), agenda);
+        }
+        m.put("agendas", agendas);
+        String atual = contas.visita(c, hoje).map(Agendamento::hospitalId).orElse("alberto");
+        m.put("agenda", agendas.get(atual));
         return m;
     }
 
@@ -200,7 +237,41 @@ public final class CheckInServico {
      * O paciente marca (ou troca) o dia e o horário da visita, entre hoje e os próximos dias da agenda sintética do
      * serviço do pedido dele. Um check-in em aberto da conta passa a usar a nova visita.
      */
+    public static Map<String, String> mapaHospital(String id) {
+        BaseSintetica.Hospital h = BaseSintetica.hospital(id);
+        return Map.of("id", h.id(), "nome", h.nome(), "endereco", h.endereco());
+    }
+
     public synchronized Map<String, Object> agendar(String contaId, String dia, String horario) {
+        String hospitalId = contas.visita(conta(contaId), LocalDate.now(relogio)).map(Agendamento::hospitalId).orElse("alberto");
+        return agendar(contaId, dia, horario, hospitalId);
+    }
+
+    public synchronized Map<String, Object> selecionarExame(String contaId, String exameId) {
+        var conta = conta(contaId);
+        Agendamento exame = contas.exames(conta, LocalDate.now(relogio)).stream().filter(e -> e.id().equals(exameId)).findFirst()
+                .orElseThrow(() -> new RegraException(404, "Exame agendado não encontrado para esta conta."));
+        contas.selecionarExame(conta, exame.id(), LocalDate.now(relogio));
+        return resumoConta(contaId);
+    }
+
+    public synchronized Map<String, Object> preverChegada(String contaId, String dia, String horario, String hospitalId) {
+        return salvarVisita(contaId, dia, horario, hospitalId, true);
+    }
+
+    public synchronized Map<String, Object> agendar(String contaId, String dia, String horario, String hospitalId) {
+        var atual = contas.visita(conta(contaId), LocalDate.now(relogio)).orElse(null);
+        if (atual != null && "EXAME_AGENDADO".equals(atual.tipo())) {
+            throw new RegraException(409, "O exame já tem hospital, data e horário definidos. Fale com a unidade para alterar.");
+        }
+        return salvarVisita(contaId, dia, horario, hospitalId, false);
+    }
+
+    private Map<String, Object> salvarVisita(String contaId, String dia, String horario, String hospitalId, boolean previsao) {
+        if (hospitalId == null || BaseSintetica.HOSPITAIS.stream().noneMatch(h -> h.id().equals(hospitalId))) {
+            throw new RegraException(400, "Escolha um hospital válido antes de agendar.");
+        }
+        BaseSintetica.Hospital hospital = BaseSintetica.hospital(hospitalId);
         ContasSinteticas.Conta conta = conta(contaId);
         LocalDate hoje = LocalDate.now(relogio);
         LocalDate data;
@@ -214,16 +285,22 @@ public final class CheckInServico {
                     + (BaseSintetica.DIAS_DA_AGENDA - 1) + " dias.");
         }
         String escolhido = horario == null ? "" : horario.trim();
-        BaseSintetica.Horario h = contas.horarios(conta, data, hoje, LocalTime.now(relogio)).stream()
+        List<BaseSintetica.Horario> grade = previsao
+                ? BaseSintetica.GRADE.stream().filter(t -> !data.equals(hoje) || LocalTime.parse(t).isAfter(LocalTime.now(relogio)))
+                    .map(t -> new BaseSintetica.Horario(t, true, false)).toList()
+                : contas.horarios(conta, data, hoje, LocalTime.now(relogio), hospitalId);
+        BaseSintetica.Horario h = grade.stream()
                 .filter(x -> x.horario().equals(escolhido)).findFirst()
                 .orElseThrow(() -> new RegraException(400, "Horário indisponível: fora da agenda desse dia ou já passou."));
         if (!h.atual()) {
             if (!h.disponivel()) throw new RegraException(409, "Esse horário acabou de ser ocupado. Escolha outro.");
-            exigirValidadeAte(conta, data);
-            Agendamento novo = contas.agendar(conta, data, escolhido);
-            String quando = data.format(DIA) + " às " + escolhido;
+            exigirValidadeAte(conta, data, previsao ? "PRONTO_SOCORRO" : "AGENDADO");
+            Agendamento novo = previsao ? contas.preverChegada(conta, data, escolhido, hospitalId)
+                    : contas.agendar(conta, data, escolhido, hospitalId);
+            String quando = data.format(DIA) + " às " + escolhido + " no " + hospital.nome();
             for (CheckIn c : checkIns.values()) {
-                if (conta.id().equals(c.contaId) && c.status != CONCLUIDO) {
+                if (conta.id().equals(c.contaId) && c.status != CONCLUIDO && c.agendamento != null
+                        && c.agendamento.tipo().equals(previsao ? "PRONTO_SOCORRO" : "AGENDADO")) {
                     if (c.agendamento != null) c.agendamento = novo;
                     String apoio = "";
                     if (c.status == APOIO_PRESENCIAL) {
@@ -231,7 +308,7 @@ public final class CheckInServico {
                         c.horarioApoio = escolhido;
                         apoio = " O atendimento no balcão passa para o mesmo dia e horário.";
                     }
-                    evento(c, "PACIENTE", "Trocou a visita para " + quando + "." + apoio);
+                    evento(c, "PACIENTE", (previsao ? "Atualizou a previsão de chegada para " : "Trocou a visita para ") + quando + "." + apoio);
                 }
             }
         }
@@ -247,9 +324,9 @@ public final class CheckInServico {
      * de então; trocar para um dia em que a guia ou a carteirinha já venceram não é aceito: o paciente escolhe outro
      * dia ou fala com uma pessoa.
      */
-    private void exigirValidadeAte(ContasSinteticas.Conta conta, LocalDate dia) {
+    private void exigirValidadeAte(ContasSinteticas.Conta conta, LocalDate dia, String tipo) {
         for (CheckIn c : checkIns.values()) {
-            if (!conta.id().equals(c.contaId) || c.status == CONCLUIDO) continue;
+            if (!conta.id().equals(c.contaId) || c.status == CONCLUIDO || c.agendamento == null || !tipo.equals(c.agendamento.tipo())) continue;
             if (c.senha != null) {
                 throw new RegraException(409, "Você já confirmou a chegada ao hospital. Para mudar a visita, fale com a recepção.");
             }
@@ -274,17 +351,31 @@ public final class CheckInServico {
         return iniciar(null);
     }
 
-    public synchronized CheckIn iniciar(String contaId) {
+    public synchronized CheckIn iniciar(String contaId) { return iniciar(contaId, null); }
+
+    public synchronized CheckIn iniciar(String contaId, String tipo) {
+        if (tipo != null && !List.of("AGENDADO", "EXAME_AGENDADO", "PRONTO_SOCORRO").contains(tipo)) {
+            throw new RegraException(400, "Tipo de atendimento inválido.");
+        }
         ContasSinteticas.Conta conta = contaId == null ? null : conta(contaId);
-        Agendamento visita = conta == null ? null : contas.visita(conta, LocalDate.now(relogio)).orElse(null);
+        Agendamento visita = conta == null ? null : (tipo == null ? contas.visita(conta, LocalDate.now(relogio))
+                : contas.visitaDoTipo(conta, tipo, LocalDate.now(relogio))).orElse(null);
         if (conta != null && visita == null) {
             throw new RegraException(409, "Escolha o dia e o horário da visita antes de começar o check-in.");
+        }
+        if (conta != null) {
+            for (CheckIn existente : checkIns.values()) {
+                if (conta.id().equals(existente.contaId) && existente.status != CONCLUIDO
+                        && existente.agendamento != null && existente.agendamento.id().equals(visita.id())
+                        && existente.agendamento.tipo().equals(visita.tipo())) return existente;
+            }
         }
         CheckIn c = new CheckIn(UUID.randomUUID().toString(), relogio.instant());
         if (conta != null) {
             c.contaId = conta.id();
             c.contaEmail = conta.email();
             c.titular = conta.paciente();
+            c.agendamento = visita;
         }
         checkIns.put(c.id, c);
         evento(c, "PACIENTE", conta == null ? "Check-in iniciado."
@@ -338,7 +429,7 @@ public final class CheckInServico {
             // A guia é emitida pelo hospital e enviada ao convênio: o paciente não confirma nada sobre ela.
             c.status = PRONTO_PARA_CHEGADA;
             desfecho(c, Desfecho.CONCLUIDO_AUTOMATICO);
-            evento(c, "SISTEMA", "Conferência sem pendências (guia " + c.guia.numero() + " autorizada). Pré-check-in concluído.");
+            evento(c, "SISTEMA", c.guia == null ? "Pré-cadastro administrativo concluído. Previsão de chegada sem reserva de atendimento." : "Conferência sem pendências (guia " + c.guia.numero() + " autorizada). Pré-check-in concluído.");
         } else {
             c.motivos.addAll(r.motivos());
             c.status = ATENDIMENTO_REMOTO;
@@ -400,7 +491,7 @@ public final class CheckInServico {
     private Conferencia.Resultado conferirLidos(CheckIn c) {
         c.nomeLido = c.identidadeLida.campo(LeitorDocumento.NOME);
         c.cpfLido = c.identidadeLida.campo(LeitorDocumento.CPF);
-        Conferencia.Resultado r = conferencia.conferir(c.identidadeLida, c.carteirinhaLida, LocalDate.now(relogio), c.titular);
+        Conferencia.Resultado r = conferencia.conferir(c.identidadeLida, c.carteirinhaLida, LocalDate.now(relogio), c.titular, c.agendamento);
         c.verificacoes = r.verificacoes();
         c.paciente = r.paciente();
         c.agendamento = r.agendamento();
@@ -487,9 +578,7 @@ public final class CheckInServico {
      */
     private void marcarApoio(CheckIn c) {
         LocalDate hoje = LocalDate.now(relogio);
-        Agendamento a = c.contaId != null
-                ? contas.visita(conta(c.contaId), hoje).orElse(null)
-                : c.agendamento != null && !c.agendamento.data().isBefore(hoje) ? c.agendamento : null;
+        Agendamento a = c.agendamento != null && !c.agendamento.data().isBefore(hoje) ? c.agendamento : null;
         boolean aindaVem = a != null && (a.data().isAfter(hoje) || LocalTime.parse(a.horario()).isAfter(LocalTime.now(relogio)));
         c.diaApoio = aindaVem ? a.data() : null;
         c.horarioApoio = aindaVem ? a.horario() : null;

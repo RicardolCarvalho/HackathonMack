@@ -55,6 +55,10 @@ public final class VerificaCenarios {
         teste("Voltar: paciente desiste do apoio antes de chegar e volta para onde estava", VerificaCenarios::voltarDoApoio);
         teste("Limites: campos de atendimento e motivo são recusados", VerificaCenarios::limitesDosCampos);
         teste("Cadastro: conta nova só com dados fictícios, sem guia vai para uma pessoa e some ao zerar", VerificaCenarios::cadastroNoPortal);
+        teste("Hospital: agenda por unidade, troca persistida e hospital obrigatório", VerificaCenarios::hospitalDaVisita);
+        teste("Exames: horário e hospital fixos, titularidade e retomada", VerificaCenarios::examesFixos);
+        teste("Pronto-socorro: previsão não reserva vaga nem exige autorização prévia", VerificaCenarios::previsaoProntoSocorro);
+        teste("Exame e pronto-socorro coexistem sem trocar documentos, guia ou hospital", VerificaCenarios::atendimentosIndependentes);
         teste("JSON: escrita e leitura", VerificaCenarios::json);
         teste("CPFs da base sintética têm dígito verificador inválido", VerificaCenarios::cpfsFicticios);
 
@@ -634,6 +638,118 @@ public final class VerificaCenarios {
                 if (e.getClassName().contains("VerificaCenarios")) { System.out.println("         em " + e); break; }
             }
         }
+    }
+
+    private static void hospitalDaVisita() {
+        LocalDate hoje = LocalDate.now();
+        LocalDate dia = hoje.plusDays(1);
+        BaseSintetica base = new BaseSintetica(hoje);
+        ContasSinteticas contas = new ContasSinteticas(base);
+        CheckInServico s = new CheckInServico(relogio(hoje, 8, 0), new LeitorSvgSimulado(),
+                new Conferencia(base), kits, contas);
+        String ana = contas.porEmail("ana.beatriz@exemplo.test").orElseThrow().id();
+        String marina = contas.porEmail("marina.castro@exemplo.test").orElseThrow().id();
+        String horario = base.horarios("P1", dia, hoje, java.time.LocalTime.of(8, 0), "alberto")
+                .stream().filter(BaseSintetica.Horario::disponivel).findFirst().orElseThrow().horario();
+        recusa(400, () -> s.agendar(ana, dia.toString(), horario, null));
+        recusa(400, () -> s.agendar(ana, dia.toString(), horario, "inexistente"));
+        s.agendar(ana, dia.toString(), horario, "alberto");
+        recusa(409, () -> s.agendar(marina, dia.toString(), horario, "alberto"));
+        s.agendar(marina, dia.toString(), horario, "sao-lucas"); // mesma hora, outra unidade
+        CheckIn c = s.iniciar(ana);
+        var kit = kits.kit("ana");
+        s.enviarDocumentos(c.id, "ana", kits.svgIdentidade(kit), kits.svgCarteirinha(kit));
+        igual("alberto", c.agendamento.hospitalId());
+        s.agendar(ana, dia.toString(), horario, "12-maio"); // mesma data/hora, troca apenas de hospital
+        igual("12-maio", c.agendamento.hospitalId());
+        String mapa = Json.texto(c.paraMapa(false));
+        verdade(mapa.contains("Hospital 12 de Maio"));
+        verdade(mapa.contains("Avenida do Horizonte"));
+        verdade(Json.texto(s.resumoConta(ana)).contains("Hospital São Lucas"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void examesFixos() {
+        LocalDate hoje = LocalDate.now();
+        var base = new BaseSintetica(hoje);
+        var contas = new ContasSinteticas(base);
+        var s = new CheckInServico(relogio(hoje, 8, 0), new LeitorSvgSimulado(), new Conferencia(base), kits, contas);
+        String ana = contas.porEmail("ana.beatriz@exemplo.test").orElseThrow().id();
+        var exame = base.exames("P1", hoje).get(0);
+        recusa(404, () -> s.selecionarExame(ana, "EX-P2"));
+        s.selecionarExame(ana, exame.id());
+        var visita = (Map<String, Object>) s.resumoConta(ana).get("visita");
+        igual(exame.horario(), visita.get("horario"));
+        igual(exame.hospitalId(), visita.get("hospitalId"));
+        igual("EXAME_AGENDADO", visita.get("tipo"));
+        recusa(409, () -> s.agendar(ana, hoje.plusDays(2).toString(), "12:00", "sao-lucas"));
+        CheckIn c = s.iniciar(ana);
+        igual(c.id, s.iniciar(ana).id);
+        s.preverChegada(ana, hoje.toString(), "18:00", "alberto"); // exame não impede pronto-socorro
+        var kit = kits.kit("ana");
+        s.enviarDocumentos(c.id, "ana", kits.svgIdentidade(kit), kits.svgCarteirinha(kit));
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, c.status);
+        igual("EXAME_AGENDADO", c.agendamento.tipo());
+        igual(exame.id(), c.guia.agendamentoId());
+    }
+
+    private static void previsaoProntoSocorro() {
+        LocalDate hoje = LocalDate.now();
+        var base = new BaseSintetica(hoje);
+        var contas = new ContasSinteticas(base);
+        var s = new CheckInServico(relogio(hoje, 8, 0), new LeitorSvgSimulado(), new Conferencia(base), kits, contas);
+        String ana = contas.porEmail("ana.beatriz@exemplo.test").orElseThrow().id();
+        String marina = contas.porEmail("marina.castro@exemplo.test").orElseThrow().id();
+        s.preverChegada(ana, hoje.toString(), "18:00", "sao-lucas");
+        s.preverChegada(marina, hoje.toString(), "18:00", "sao-lucas"); // a previsão não ocupa vaga
+        CheckIn c = s.iniciar(ana);
+        var kit = kits.kit("ana");
+        s.enviarDocumentos(c.id, "ana", kits.svgIdentidade(kit), kits.svgCarteirinha(kit));
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, c.status);
+        igual("Pronto-socorro", c.agendamento.servico());
+        igual("PRONTO_SOCORRO", c.agendamento.tipo());
+        igual(null, c.guia);
+        igual(ResultadoVerificacao.NAO_AVALIADO, verificacao(c, "GUIA").resultado());
+        s.registrarChegada(c.id);
+        verdade(c.senha != null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void atendimentosIndependentes() {
+        LocalDate hoje = LocalDate.now();
+        var base = new BaseSintetica(hoje);
+        var contas = new ContasSinteticas(base);
+        var s = new CheckInServico(relogio(hoje, 8, 0), new LeitorSvgSimulado(), new Conferencia(base), kits, contas);
+        String ana = contas.porEmail("ana.beatriz@exemplo.test").orElseThrow().id();
+        var fixo = base.exames("P1", hoje).get(0);
+        s.selecionarExame(ana, fixo.id());
+        CheckIn exame = s.iniciar(ana, "EXAME_AGENDADO");
+        s.preverChegada(ana, hoje.toString(), "18:00", "12-maio");
+        CheckIn ps = s.iniciar(ana, "PRONTO_SOCORRO");
+        verdade(!exame.id.equals(ps.id));
+        igual(fixo, exame.agendamento);
+        igual("12-maio", ps.agendamento.hospitalId());
+        var kit = kits.kit("ana");
+        s.enviarDocumentos(exame.id, "ana", kits.svgIdentidade(kit), kits.svgCarteirinha(kit));
+        igual(fixo.id(), exame.guia.agendamentoId()); // última visita selecionada era PS
+        igual("EXAME_AGENDADO", exame.agendamento.tipo());
+        s.selecionarExame(ana, fixo.id());
+        s.enviarDocumentos(ps.id, "ana", kits.svgIdentidade(kit), kits.svgCarteirinha(kit));
+        igual(null, ps.guia); // última visita selecionada era exame
+        igual("PRONTO_SOCORRO", ps.agendamento.tipo());
+        s.preverChegada(ana, hoje.toString(), "19:00", "sao-lucas");
+        igual("19:00", ps.agendamento.horario());
+        igual(fixo, exame.agendamento);
+        igual(exame.id, s.iniciar(ana, "EXAME_AGENDADO").id);
+        igual(ps.id, s.iniciar(ana, "PRONTO_SOCORRO").id);
+        var resumo = s.resumoConta(ana);
+        var ativos = (Map<String, String>) resumo.get("checkinsAtivos");
+        igual(exame.id, ativos.get("EXAME_AGENDADO"));
+        igual(ps.id, ativos.get("PRONTO_SOCORRO"));
+        s.registrarChegada(ps.id);
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, exame.status);
+        s.selecionarExame(ana, fixo.id()); // chegada ao PS também não bloqueia o exame
+        igual(fixo, exame.agendamento);
     }
 
     private static void igual(Object esperado, Object obtido) {

@@ -16,7 +16,12 @@ let kitsPorId = {};        // kits fictícios (para o documento de exemplo e o d
 let checkIn = null;
 let docs = vazios();       // envio inicial: arquivo e leitura de cada documento
 let novos = vazios();      // reenvio: documento atualizado/correto de cada pendência
+const documentosPorAtendimento = new Map();
+let tipoAtendimento = null;
+let vendoTipos = false;
 let agendando = false;     // com visita marcada, o paciente abriu a agenda para trocar o dia ou o horário
+let hospitalEscolhido = null;
+let etapaAgenda = 'hospital';
 let diaEscolhido = null;   // dia selecionado na agenda (AAAA-MM-DD)
 let horarioEscolhido = null;
 let avisoAgenda = null;
@@ -60,6 +65,8 @@ async function executar(acao) {
 
 const entrar = (email, senha) => executar(async () => {
   conta = await api('POST', '/api/contas/entrar', { email, senha });
+  tipoAtendimento = conta.visita ? conta.visita.tipo : null;
+  vendoTipos = true;
   docs = vazios();
   limparAgenda();
   avisoAgenda = null;
@@ -68,7 +75,7 @@ const entrar = (email, senha) => executar(async () => {
   const anterior = lerGuardado(chaveCheckInDaConta());
   const aberto = anterior ? await api('GET', `/api/checkins/${anterior}`).catch(() => null) : null;
   checkIn = aberto && aberto.status !== 'CONCLUIDO' ? aberto : null;
-  noInicio = !!checkIn;
+  noInicio = true;
 });
 
 // ----- Cadastro (simulado): conta nova com dados fictícios -----
@@ -91,13 +98,19 @@ const criarConta = () => executar(async () => {
   rascunho = {};
   checkIn = null;
   noInicio = false;
+  vendoTipos = false;
   docs = vazios();
   limparAgenda();
-  avisoAgenda = 'Conta criada. Agora escolha o dia e o horário da sua visita.';
+  tipoAtendimento = null;
+  vendoTipos = true;
+  avisoAgenda = 'Conta criada. Escolha como você quer iniciar seu pré-cadastro.';
 });
 
 function sair() {
+  if (checkIn) documentosPorAtendimento.set(checkIn.id, { docs, novos });
   conta = null;
+  tipoAtendimento = null;
+  vendoTipos = false;
   cadastrando = false;
   checkIn = null;
   noInicio = false;
@@ -115,12 +128,16 @@ function sair() {
 function limparAgenda() {
   agendando = false;
   agendaDoCheckIn = false;
+  hospitalEscolhido = null;
+  etapaAgenda = 'hospital';
   diaEscolhido = null;
   horarioEscolhido = null;
 }
 
 function abrirAgenda() {
   agendando = true;
+  hospitalEscolhido = conta.visita ? conta.visita.hospitalId : null;
+  etapaAgenda = 'hospital';
   avisoAgenda = null;
   diaEscolhido = conta.visita ? conta.visita.data : null;
   horarioEscolhido = null;
@@ -154,9 +171,9 @@ function escolherHorario(horario) {
 
 const confirmarAgendamento = (dia, horario) => executar(async () => {
   try {
-    conta = await api('POST', `/api/contas/${conta.id}/agendamento`, { dia, horario });
+    conta = await api('POST', `/api/contas/${conta.id}/${tipoAtendimento === 'PRONTO_SOCORRO' ? 'previsao' : 'agendamento'}`, { dia, horario, hospitalId: hospitalEscolhido });
     if (checkIn) checkIn = await api('GET', `/api/checkins/${checkIn.id}`); // o check-in aberto passa a usar a nova visita
-    const texto = `Pronto! Sua visita está marcada para ${quando(dia, horario, conta.hoje)}.`;
+    const texto = `${tipoAtendimento === "PRONTO_SOCORRO" ? "Previsão de chegada registrada" : "Visita confirmada"} no ${conta.visita.hospital.nome}, ${quando(dia, horario, conta.hoje)}.`;
     if (agendaDoCheckIn) { noInicio = false; recado = { texto, tipo: 'ok', icone: 'check' }; } // volta para a etapa do check-in
     else avisoAgenda = texto;
     limparAgenda();
@@ -168,8 +185,9 @@ const confirmarAgendamento = (dia, horario) => executar(async () => {
 });
 
 const comecar = () => executar(async () => {
-  checkIn = await api('POST', '/api/checkins', { contaId: conta.id });
+  checkIn = await api('POST', '/api/checkins', { contaId: conta.id, tipo: tipoAtendimento });
   noInicio = false;
+  vendoTipos = false;
   docs = vazios();
   limparAgenda();
   avisoAgenda = null;
@@ -333,6 +351,7 @@ function visitaPorVir() {
 
 function textoApoio() {
   const v = visitaPorVir();
+  if (v && v.tipo === 'PRONTO_SOCORRO') return 'Você poderá pedir apoio à recepção quando chegar ao hospital. A previsão informada não reserva um horário de atendimento.';
   return v
     ? `Uma pessoa da recepção atende você no balcão de apoio no horário da sua visita, ${quando(v.data, v.horario, conta.hoje)}.`
     : 'Uma pessoa da recepção atende você no balcão de apoio assim que você chegar ao hospital.';
@@ -450,7 +469,7 @@ function nomePaciente() { return conta ? conta.primeiroNome : checkIn.nomeLido; 
 
 function telaLogin() {
   definirCabecalho('Sua recepção, antes de chegar',
-    'Agende o dia e o horário, envie seus documentos pelo celular e, no hospital, só pegue a senha.');
+    'Adiante seu pré-cadastro para exames agendados ou para uma chegada ao pronto-socorro.');
   const enviar = (ev) => {
     ev.preventDefault();
     entrar(document.getElementById('email').value, document.getElementById('senha').value);
@@ -484,7 +503,7 @@ function telaLogin() {
 }
 
 function telaCadastro() {
-  definirCabecalho('Criar sua conta', 'Seus dados, os do convênio e o que você vai agendar. Depois é só escolher o dia e o horário.',
+  definirCabecalho('Criar sua conta', 'Preencha seus dados fictícios para iniciar o pré-cadastro. Depois, escolha o tipo de atendimento.',
     { rotulo: 'Voltar', acao: fecharCadastro });
   const campo = (id, rotulo, atributos, dica) => el('div', { class: 'campo' },
     el('label', { for: 'cad-' + id }, rotulo),
@@ -530,21 +549,92 @@ function telaCadastro() {
  * check-in, volta para lá); senão, a página anterior é o login. Um check-in em aberto fica guardado e volta ao entrar.
  */
 function voltarDoInicio() {
-  return { rotulo: 'Voltar', acao: agendando ? fecharAgenda : sair };
+  return { rotulo: 'Voltar', acao: () => {
+    if (vendoTipos) { sair(); return; }
+    if (etapaAgenda === 'horario' && (agendando || !conta.visita)) { etapaAgenda = 'hospital'; desenhar(); return; }
+    if (agendando) { fecharAgenda(); return; }
+    if (checkIn) documentosPorAtendimento.set(checkIn.id, { docs, novos });
+    vendoTipos = true; desenhar();
+  } };
+}
+
+const iniciarExame = (exameId) => executar(async () => {
+  if (checkIn) documentosPorAtendimento.set(checkIn.id, { docs, novos });
+  conta = await api('POST', `/api/contas/${conta.id}/exame`, { exameId });
+  tipoAtendimento = 'EXAME_AGENDADO';
+  vendoTipos = false;
+  checkIn = await api('POST', '/api/checkins', { contaId: conta.id, tipo: tipoAtendimento });
+  noInicio = false;
+  const salvos = documentosPorAtendimento.get(checkIn.id);
+  docs = salvos ? salvos.docs : vazios();
+  novos = salvos ? salvos.novos : vazios();
+  limparAgenda();
+});
+
+const escolherTipo = (tipo) => executar(async () => {
+  if (checkIn) documentosPorAtendimento.set(checkIn.id, { docs, novos });
+  conta = await api('GET', `/api/contas/${conta.id}`);
+  tipoAtendimento = tipo;
+  conta.visita = (conta.visitas || {})[tipo] || null;
+  const ativo = (conta.checkinsAtivos || {})[tipo];
+  checkIn = ativo ? await api('GET', `/api/checkins/${ativo}`) : null;
+  const rascunhoAtendimento = checkIn && documentosPorAtendimento.get(checkIn.id);
+  docs = rascunhoAtendimento ? rascunhoAtendimento.docs : vazios();
+  novos = rascunhoAtendimento ? rascunhoAtendimento.novos : vazios();
+  noInicio = true;
+  atras = 0;
+  vendoTipos = false;
+  limparAgenda();
+  avisoAgenda = null;
+});
+
+function telaTipos() {
+  definirCabecalho(`Olá, ${conta.primeiroNome}`, 'Como podemos adiantar seu atendimento hoje?', { rotulo: 'Voltar', acao: sair });
+  return [el('section', { class: 'cartao' },
+    tituloComIcone('identidade', 'Escolha o tipo de atendimento', 'Seu pré-cadastro começa por aqui.'),
+    el('div', { class: 'tipos-atendimento' },
+      el('button', { class: 'tipo-opcao', disabled: ocupado, onclick: () => escolherTipo('EXAME_AGENDADO') },
+        selo('calendario'), el('span', { class: 'tipo-texto' }, el('strong', {}, 'Exames agendados'),
+          el('span', {}, 'Já tenho um exame marcado. Quero adiantar meu pré-cadastro.'),
+          el('small', {}, 'Hospital, data e horário já definidos')), icone('seta')),
+      el('button', { class: 'tipo-opcao', disabled: ocupado, onclick: () => escolherTipo('PRONTO_SOCORRO') },
+        selo('mais'), el('span', { class: 'tipo-texto' }, el('strong', {}, 'Pronto-socorro'),
+          el('span', {}, 'Quero escolher o hospital e informar quando pretendo chegar.'),
+          el('small', {}, 'Previsão de chegada, sem reserva de atendimento')), icone('seta'))))];
+}
+
+function telaExames() {
+  definirCabecalho('Seus exames agendados', 'Confira os dados do exame e adiante seu pré-cadastro. Não é preciso escolher hospital ou horário.',
+    { rotulo: 'Voltar', acao: () => { vendoTipos = true; desenhar(); } });
+  const exames = conta.exames || [];
+  if (!exames.length) return [el('section', { class: 'cartao' },
+    tituloComIcone('calendario', 'Nenhum exame agendado', 'Não encontramos exames previamente marcados para esta conta.'),
+    nota('Nesta demonstração, as contas de exemplo têm exames fictícios já marcados. Criar uma conta não agenda um exame.'),
+    el('button', { class: 'secundario largo', onclick: () => { vendoTipos = true; desenhar(); } }, 'Voltar às opções'))];
+  return exames.map(e => el('section', { class: 'cartao' },
+    el('div', { class: 'cartao-topo' }, tituloComIcone('calendario', e.servico), el('span', { class: 'chip info' }, 'Já agendado')),
+    el('div', { class: 'visita' }, el('div', { class: 'visita-hora' }, el('small', {}, rotuloDia(e.data, conta.hoje)), e.horario),
+      el('div', { class: 'visita-texto' }, el('strong', {}, 'Horário definido pela unidade'), el('p', { class: 'suave pequeno' }, 'Seu exame continua marcado para este horário.'))),
+    resumoHospital(e),
+    el('button', { class: 'primario largo', disabled: ocupado, onclick: () => iniciarExame(e.id) },
+      checkIn && conta.visita && conta.visita.tipo === 'EXAME_AGENDADO' ? 'Continuar pré-cadastro' : 'Fazer pré-cadastro', icone('seta')),
+    nota('Exame fictício já agendado. Para alterar o local ou o horário, fale com a unidade.', 'calendario')));
 }
 
 function telaInicioConta() {
-  const v = conta.visita;
-  const servico = (conta.servico || 'atendimento').toLowerCase();
+  if (!tipoAtendimento && conta.visita) tipoAtendimento = conta.visita.tipo;
+  if (vendoTipos || !tipoAtendimento) return telaTipos();
+  if (tipoAtendimento === 'EXAME_AGENDADO') return telaExames();
+  const v = conta.visita && conta.visita.tipo === tipoAtendimento ? conta.visita : null;
   if (!v) {
     definirCabecalho(`Olá, ${conta.primeiroNome}`,
-      `Você tem um pedido de ${servico} para agendar. Escolha o dia e o horário; depois, adiante o check-in pelo celular.`,
+      'Escolha o hospital e informe a previsão de chegada ao pronto-socorro. Depois, adiante seu pré-cadastro.',
       voltarDoInicio());
     return [cartaoAgendar()];
   }
   definirCabecalho(`Olá, ${conta.primeiroNome}`, v.horarioPassou
     ? 'O horário da sua visita já passou. Escolha um novo dia ou horário.'
-    : `Sua visita está marcada para ${quando(v.data, v.horario, conta.hoje)}. Adiante o check-in e, no hospital, só pegue a senha.`,
+    : `Sua previsão de chegada é ${quando(v.data, v.horario, conta.hoje)}. Adiante seu pré-cadastro administrativo.`,
   voltarDoInicio());
   return [cartaoVisita(v), v.horarioPassou ? null : cartaoCheckIn()];
 }
@@ -552,10 +642,10 @@ function telaInicioConta() {
 function cartaoAgendar() {
   return el('section', { class: 'cartao' },
     el('div', { class: 'cartao-topo' },
-      tituloComIcone('calendario', 'Agende sua visita', conta.servico),
-      el('span', { class: 'chip info' }, 'A agendar')),
+      tituloComIcone('calendario', 'Planeje sua chegada', 'Pronto-socorro'),
+      el('span', { class: 'chip info' }, 'Previsão de chegada')),
     avisoAgenda ? aviso(avisoAgenda, 'ok', 'check') : null,
-    seletorAgenda(null));
+    fluxoAgenda(null));
 }
 
 function cartaoVisita(v) {
@@ -563,21 +653,58 @@ function cartaoVisita(v) {
   const abrir = !chegou && (agendando || v.horarioPassou);
   return el('section', { class: 'cartao' },
     el('div', { class: 'cartao-topo' },
-      tituloComIcone('calendario', 'Sua visita'),
-      el('span', { class: 'chip ' + (v.horarioPassou ? 'atencao' : 'ok') }, v.horarioPassou ? 'Horário já passou' : 'Agendada')),
+      tituloComIcone('calendario', v.tipo === 'PRONTO_SOCORRO' ? 'Sua previsão de chegada' : 'Sua visita'),
+      el('span', { class: 'chip ' + (v.horarioPassou ? 'atencao' : 'ok') }, v.horarioPassou ? 'Horário já passou' : v.tipo === 'PRONTO_SOCORRO' ? 'Chegada prevista' : 'Agendada')),
     el('div', { class: 'visita' },
       el('div', { class: 'visita-hora' }, el('small', {}, rotuloDia(v.data, conta.hoje)), v.horario),
       el('div', { class: 'visita-texto' },
         el('div', { class: 'visita-servico' }, v.servico))),
+    resumoHospital(v),
     avisoAgenda ? aviso(avisoAgenda, 'ok', 'check') : null,
     chegou ? nota('Você já confirmou a chegada. Para mudar a visita, fale com a recepção.', 'pessoa')
-      : abrir ? seletorAgenda(v)
-      : el('button', { class: 'secundario', onclick: abrirAgenda, disabled: ocupado }, icone('calendario'), 'Trocar dia ou horário'));
+      : abrir ? fluxoAgenda(v)
+      : el('button', { class: 'secundario', onclick: abrirAgenda, disabled: ocupado }, icone('calendario'), 'Trocar hospital, dia ou horário'));
 }
 
 /** Agenda dos próximos dias do serviço do pedido: primeiro o dia, depois o horário, e por fim a confirmação. */
+function resumoHospital(visita) {
+  const h = visita && visita.hospital;
+  return h ? el('div', { class: 'hospital-resumo' }, icone('local'),
+    el('div', {}, el('strong', {}, h.nome), el('p', {}, h.endereco))) : null;
+}
+
+function fluxoAgenda(v) {
+  const hospitais = conta.hospitais || [];
+  const h = hospitais.find((item) => item.id === hospitalEscolhido);
+  const passoHospital = etapaAgenda === 'hospital' || !h;
+  return el('div', { class: 'fluxo-agenda' },
+    el('nav', { class: 'abas-agenda', 'aria-label': 'Etapas do agendamento' },
+      el('button', { type: 'button', 'aria-current': passoHospital ? 'step' : null,
+        onclick: () => { etapaAgenda = 'hospital'; desenhar(); }, disabled: ocupado },
+        el('span', {}, '01'), 'Hospital'),
+      el('button', { type: 'button', 'aria-current': !passoHospital ? 'step' : null,
+        disabled: ocupado || !h, onclick: () => { etapaAgenda = 'horario'; desenhar(); } },
+        el('span', {}, '02'), 'Data e horário')),
+    passoHospital ? el('div', { class: 'escolha-hospital' },
+      el('div', {}, el('h3', {}, 'Onde você quer ser atendido?'),
+        el('p', { class: 'suave pequeno' }, 'Escolha uma unidade para consultar os horários.')),
+      el('div', { class: 'lista-hospitais', role: 'group', 'aria-label': 'Hospitais disponíveis' },
+        hospitais.map((hospital, i) => el('button', { class: 'hospital-opcao', type: 'button',
+          'aria-pressed': String(hospital.id === hospitalEscolhido), disabled: ocupado,
+          onclick: () => { if (hospitalEscolhido !== hospital.id) { diaEscolhido = null; horarioEscolhido = null; }
+            hospitalEscolhido = hospital.id; desenhar(); } },
+          el('span', { class: 'hospital-simbolo', 'aria-hidden': 'true' }, icone('mais')),
+          el('span', { class: 'hospital-descricao' }, el('span', { class: 'hospital-categoria' }, `Unidade 0${i + 1}`),
+            el('strong', {}, hospital.nome), el('span', { class: 'hospital-endereco' }, icone('local'), hospital.endereco)),
+          el('span', { class: 'hospital-radio', 'aria-hidden': 'true' }, hospital.id === hospitalEscolhido ? icone('check') : null)))),
+      el('p', { class: 'suave pequeno' }, 'Hospitais e endereços fictícios para esta demonstração.'),
+      el('button', { class: 'primario largo', disabled: ocupado || !h,
+        onclick: () => { etapaAgenda = 'horario'; desenhar(); } }, 'Continuar para data e horário', icone('seta')))
+    : el('div', {}, resumoHospital({ hospital: h }), nota('Esta é uma previsão de chegada. Não reserva atendimento nem define a prioridade da triagem.', 'relogio'), seletorAgenda(v)));
+}
+
 function seletorAgenda(v) {
-  const agenda = conta.agenda || [];
+  const agenda = tipoAtendimento === 'PRONTO_SOCORRO' ? (conta.previsoes || []) : ((conta.agendas || {})[hospitalEscolhido] || []);
   const livres = (d) => d.horarios.filter((h) => h.disponivel).length;
   const dia = agenda.find((d) => d.data === diaEscolhido)
     || (v && !v.horarioPassou && agenda.find((d) => d.data === v.data))
@@ -602,12 +729,12 @@ function seletorAgenda(v) {
         class: 'dia' + (marcado ? ' escolhido' : ''),
         disabled: ocupado || n === 0,
         'aria-pressed': String(marcado),
-        'aria-label': `${nomeDoDia(d.data, conta.hoje)}, ${diaMes(d.data)}: ${n === 0 ? 'sem horários livres' : n + ' horários livres'}`,
+        'aria-label': `${nomeDoDia(d.data, conta.hoje)}, ${diaMes(d.data)}: ${n === 0 ? 'sem horários livres' : n + ' horários disponíveis'}`,
         onclick: () => escolherDia(d.data),
       },
         el('span', { class: 'dia-nome' }, nomeDoDia(d.data, conta.hoje)),
         el('strong', {}, diaMes(d.data)),
-        el('span', { class: 'dia-livres' }, n === 0 ? 'sem horário' : `${n} livres`));
+        el('span', { class: 'dia-livres' }, n === 0 ? 'sem horário' : `${n} opções`));
     })),
     dia ? el('h3', {}, `2. Escolha o horário (${rotuloDia(dia.data, conta.hoje).toLowerCase()})`) : null,
     !dia ? aviso('Não há horários livres nos próximos dias. Fale com uma pessoa da recepção para agendar.', 'info', 'relogio') : null,
@@ -622,25 +749,25 @@ function seletorAgenda(v) {
           onclick: () => escolherHorario(h.horario),
         }, h.horario))))),
     dia ? el('div', { class: 'legenda' },
-      el('span', {}, el('i', {}), 'Livre'),
+      el('span', {}, el('i', {}), 'Disponível'),
       el('span', {}, el('i', { class: 'escolhido' }), 'Escolhido'),
       v ? el('span', {}, el('i', { class: 'atual' }), 'Seu horário atual') : null,
-      el('span', {}, el('i', { class: 'ocupado' }), 'Ocupado')) : null,
+      tipoAtendimento === 'PRONTO_SOCORRO' ? null : el('span', {}, el('i', { class: 'ocupado' }), 'Ocupado')) : null,
     escolhido
       ? el('button', { class: 'primario largo', onclick: () => confirmarAgendamento(dia.data, escolhido), disabled: ocupado },
-          icone('check'), `${v ? 'Trocar para' : 'Agendar para'} ${quando(dia.data, escolhido, conta.hoje)}`)
-      : dia ? el('p', { class: 'suave pequeno' }, 'Toque num horário livre para confirmar.') : null);
+          icone('check'), `Confirmar chegada prevista ${quando(dia.data, escolhido, conta.hoje)}`)
+      : dia ? el('p', { class: 'suave pequeno' }, 'Selecione quando você pretende chegar.') : null);
 }
 
 function cartaoCheckIn() {
   const passos = [
     ['upload', 'Envie documento e carteirinha', 'O assistente mostra o que leu para você conferir.'],
-    ['escudo', 'A gente confere', 'Cadastro, carteirinha, visita agendada e guia do convênio.'],
-    ['senha', 'No hospital, pegue a senha', 'Sem passar pela fila da recepção.'],
+    ['escudo', 'A gente confere', 'Os dados administrativos do seu atendimento.'],
+    ['senha', 'Confirme sua chegada', 'A equipe do hospital orienta os próximos passos.'],
   ];
   const emAndamento = checkIn && noInicio; // voltou dos documentos: o check-in continua de onde parou
   return el('section', { class: 'cartao' },
-    el('h2', {}, emAndamento ? 'Check-in em andamento' : 'Check-in antecipado'),
+    el('h2', {}, emAndamento ? 'Pré-cadastro em andamento' : 'Pré-cadastro antecipado'),
     el('ol', { class: 'passos' }, passos.map(([ic, titulo, texto]) =>
       el('li', {}, selo(ic), el('div', {}, el('strong', {}, titulo), el('div', { class: 'suave pequeno' }, texto))))),
     emAndamento
@@ -857,6 +984,7 @@ function telaPronto(revisao) {
   const outroDia = a && a.data !== hoje; // a chegada só pode ser confirmada no dia da visita
   definirCabecalho(liberado ? 'Pendência resolvida' : 'Pré-check-in concluído', liberado
     ? `${liberado}, do atendimento, conferiu seu caso e liberou o check-in.`
+    : a && a.tipo === 'PRONTO_SOCORRO' ? 'Pré-cadastro administrativo concluído. A avaliação e a prioridade são definidas pela equipe na chegada.'
     : `Levou ${segundos(checkIn.tempoAteDesfechoSeg)}. Você não precisa passar pela recepção.`,
   VOLTAR);
   return [
@@ -873,10 +1001,11 @@ function telaPronto(revisao) {
         el('div', { class: 'visita-hora' }, el('small', {}, rotuloDia(a.data, hoje)), a.horario),
         el('div', { class: 'visita-texto' },
           el('div', { class: 'visita-servico' }, a.servico))) : null,
+      resumoHospital(a),
       revisao ? null : el('button', { class: 'sucesso largo', onclick: registrarChegada, disabled: ocupado || outroDia }, icone('local'), 'Cheguei ao hospital'),
       !revisao && outroDia ? nota(`O botão libera no dia da visita (${diaMes(a.data)}). Seu check-in fica guardado até lá.`, 'calendario') : null,
-      revisao ? null : el('button', { class: 'secundario largo', onclick: trocarVisitaDoCheckIn, disabled: ocupado },
-        icone('calendario'), 'Trocar dia ou horário')),
+      revisao || (a && a.tipo === 'EXAME_AGENDADO') ? null : el('button', { class: 'secundario largo', onclick: trocarVisitaDoCheckIn, disabled: ocupado },
+        icone('calendario'), 'Trocar hospital, dia ou horário')),
     revisao ? botaoAvancar() : null,
   ];
 }
@@ -885,13 +1014,14 @@ function telaConcluido() {
   const presencial = checkIn.senha && checkIn.senha.startsWith('P-');
   definirCabecalho('Chegada confirmada', presencial
     ? `${checkIn.atendidoPor || 'A recepção'} registrou sua passagem no balcão.`
-    : 'Sua passagem pela recepção foi registrada. Boa consulta!',
+    : 'Sua chegada foi registrada. Siga as orientações da equipe do hospital.',
   VOLTAR);
   return [
     el('section', { class: 'cartao' },
       presencial ? null : el('div', { class: 'bilhete' },
         el('div', { class: 'rotulo-senha' }, 'Sua senha'),
         el('div', { class: 'numero' }, checkIn.senha)),
+      resumoHospital(checkIn.agendamento || (conta && conta.visita)),
       nota(`Tempo total do check-in: ${segundos(checkIn.tempoTotalSeg)}.`, 'relogio'),
       el('button', { class: 'secundario largo', onclick: irAoInicio, disabled: ocupado }, 'Ir para o início')),
   ];
@@ -924,6 +1054,7 @@ function telaApoio(revisao) {
         el('div', { class: 'visita-hora' }, el('small', {}, dia ? rotuloDia(dia, hoje) : 'Apoio'), h || 'Ao chegar'),
         el('div', { class: 'visita-texto' },
           el('div', { class: 'visita-servico' }, 'Apoio presencial'))),
+        resumoHospital(conta && conta.visita),
       revisao ? null : el('button', { class: 'sucesso largo', onclick: registrarChegada, disabled: ocupado || outroDia }, icone('local'), 'Cheguei ao hospital'),
       !revisao && outroDia ? nota(`O botão libera no dia da visita (${diaMes(dia)}).`, 'calendario') : null,
       revisao ? null : nota('O que você já enviou está com a recepção. Não precisa refazer nada.', 'escudo'),
@@ -939,6 +1070,7 @@ function telaSenhaApoio(revisao) {
       el('div', { class: 'bilhete' },
         el('div', { class: 'rotulo-senha' }, 'Senha de apoio'),
         el('div', { class: 'numero' }, checkIn.senha)),
+      resumoHospital(checkIn.agendamento || (conta && conta.visita)),
       revisao ? null : nota('Uma pessoa da recepção conclui seu check-in no balcão. Esta tela atualiza sozinha.', 'relogio')),
     revisao ? botaoAvancar() : null,
   ];
@@ -1020,11 +1152,11 @@ function guardar() {
     if (checkIn) sessionStorage.setItem(CHAVE_CHECKIN, checkIn.id);
     else sessionStorage.removeItem(CHAVE_CHECKIN);
     if (conta && checkIn) sessionStorage.setItem(chaveCheckInDaConta(), checkIn.id);
-    else if (conta) sessionStorage.removeItem(chaveCheckInDaConta());
+
   } catch (e) { /* sem armazenamento: só não retoma após recarregar */ }
 }
 
-function chaveCheckInDaConta() { return `${CHAVE_CHECKIN}.${conta.id}`; }
+function chaveCheckInDaConta() { return `${CHAVE_CHECKIN}.${conta.id}.${tipoAtendimento || 'inicio'}`; }
 
 function lerGuardado(chave) {
   try { return sessionStorage.getItem(chave); } catch (e) { return null; }
@@ -1039,8 +1171,11 @@ function lerGuardado(chave) {
     kitsPorId = Object.fromEntries(listaKits.map((k) => [k.id, k]));
     const contaId = lerGuardado(CHAVE_CONTA);
     if (contaId) conta = await api('GET', `/api/contas/${contaId}`).catch(() => null);
+    tipoAtendimento = conta && conta.visita ? conta.visita.tipo : null;
+    vendoTipos = true;
     const checkInId = conta ? lerGuardado(CHAVE_CHECKIN) : null;
     if (checkInId) checkIn = await api('GET', `/api/checkins/${checkInId}`).catch(() => null);
+    noInicio = !!conta; // A entrada sempre mostra os dois tipos antes de retomar o atendimento.
   } catch (e) {
     erro = 'Não foi possível falar com o servidor. Confira se a aplicação está rodando.';
   }

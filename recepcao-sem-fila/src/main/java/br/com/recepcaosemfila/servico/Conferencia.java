@@ -53,6 +53,10 @@ public final class Conferencia {
      * não consegue conferir o documento de outra pessoa e receber a guia dela.
      */
     public Resultado conferir(DocumentoLido identidade, DocumentoLido carteirinha, LocalDate hoje, Paciente titular) {
+        return conferir(identidade, carteirinha, hoje, titular, null);
+    }
+
+    public Resultado conferir(DocumentoLido identidade, DocumentoLido carteirinha, LocalDate hoje, Paciente titular, Agendamento visita) {
         List<Verificacao> vs = new ArrayList<>();
 
         // 1. Leitura dos documentos
@@ -98,7 +102,7 @@ public final class Conferencia {
                 p.nascimento().equals(data(nasc)), BaseSintetica.FONTE_CADASTRO));
 
         // A visita marcada (de hoje em diante). Carteirinha e guia precisam valer até o dia dela.
-        Agendamento ag = base.proximaVisita(p.id(), hoje).orElse(null);
+        Agendamento ag = visita != null ? visita : base.proximaVisita(p.id(), hoje).orElse(null);
         LocalDate diaVisita = ag != null ? ag.data() : hoje;
 
         // 4. Carteirinha
@@ -114,8 +118,13 @@ public final class Conferencia {
             vs.add(new Verificacao("AGENDAMENTO", "Agendamento da visita", OK, null,
                     ag.servico() + " em " + ag.data().format(BR) + " às " + ag.horario(),
                     BaseSintetica.FONTE_AGENDA, "Visita marcada para " + ag.data().format(BR) + "."));
-            guia = base.guiaDoAgendamento(ag.id()).orElse(null);
-            vs.add(guia(guia, p, hoje, diaVisita));
+            if ("PRONTO_SOCORRO".equals(ag.tipo())) {
+                vs.add(naoAvaliado("GUIA", "Guia do convênio", "Pré-cadastro administrativo de pronto-socorro",
+                        "A previsão de chegada não é autorização nem agendamento de atendimento. Avaliação presencial pela equipe."));
+            } else {
+                guia = base.guiaDoAgendamento(ag.id()).orElse(null);
+                vs.add(guia(guia, p, hoje, diaVisita));
+            }
         }
         return new Resultado(vs, p, ag, guia);
     }

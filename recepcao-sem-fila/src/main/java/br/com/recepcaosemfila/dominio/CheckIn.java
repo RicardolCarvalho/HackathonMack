@@ -136,7 +136,10 @@ public class CheckIn {
 
     private Map<String, Object> mapaAgendamento() {
         Map<String, Object> a = new LinkedHashMap<>();
+        a.put("tipo", agendamento.tipo());
         a.put("data", agendamento.data());
+        a.put("hospitalId", agendamento.hospitalId());
+        a.put("hospital", br.com.recepcaosemfila.servico.CheckInServico.mapaHospital(agendamento.hospitalId()));
         a.put("horario", agendamento.horario());
         a.put("servico", agendamento.servico());
         a.put("proximaEtapa", agendamento.proximaEtapa());

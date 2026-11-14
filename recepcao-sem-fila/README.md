@@ -9,6 +9,33 @@ Se algo falha, o caso vai para o atendimento remoto; quem precisa recebe apoio p
 
 Todos os dados são sintéticos. A leitura do documento (OCR) e a verificação de identidade são simuladas.
 
+## Atendimentos independentes
+
+Exames e pronto-socorro podem coexistir na mesma conta. Cada pré-cadastro guarda sua própria visita,
+hospital, documentos, guia, situação e protocolo. O resumo inclui `visitas` e `checkinsAtivos` por tipo;
+`POST /api/checkins` recebe `tipo` para retomar ou iniciar o atendimento escolhido. Alterar uma previsão
+de chegada não altera o exame. A existência de um exame nunca bloqueia o pronto-socorro.
+
+## Tipos de atendimento
+
+O portal usa o nome **Adiantamento de Triagem** e oferece dois caminhos antes da seleção do hospital:
+- **Exames agendados:** as contas de demonstração têm um exame fictício marcado para o dia seguinte,
+  com hospital e horário definidos. O paciente acessa diretamente o pré-cadastro; alterações são feitas pela unidade.
+  Contas novas não recebem um exame agendado automaticamente.
+- **Pronto-socorro:** o paciente escolhe hospital e informa data e horário como **previsão de chegada**.
+  Isso não ocupa vaga, não garante horário de atendimento nem define prioridade. O cadastro é administrativo;
+  avaliação e triagem são presenciais. A guia não é uma condição de liberação desse pré-cadastro.
+
+As rotas `POST /api/contas/{id}/exame` (`exameId`) e `/previsao` (`dia`, `horario`, `hospitalId`)
+persistem o caminho escolhido. O resumo da conta inclui `exames`, `previsoes` e o `tipo` da visita.
+
+## Hospitais da demonstração
+
+Antes de escolher a data e o horário, o paciente seleciona um hospital: Hospital Alberto Enstale,
+Hospital São Lucas ou Hospital 12 de Maio. Os nomes e endereços são fictícios. A disponibilidade é
+separada por hospital e serviço. O hospital escolhido acompanha a visita, o check-in e o painel do
+atendimento; ao trocar de unidade, é preciso escolher novamente data e horário.
+
 ## Como rodar
 
 Requisito: Java 17 ou mais novo. Não há dependências externas (nem Maven, nem internet).

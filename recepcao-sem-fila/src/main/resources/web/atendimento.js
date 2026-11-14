@@ -160,6 +160,11 @@ function tabelaInformacoes(c) {
   if (c.pacienteCadastro) linhas.push(['Paciente', c.pacienteCadastro]);
   if (c.conta) linhas.push(['Conta', c.conta]);
   if (c.agendamento) {
+    linhas.push(['Tipo de atendimento', c.agendamento.tipo === 'PRONTO_SOCORRO' ? 'Pronto-socorro · previsão de chegada' : c.agendamento.tipo === 'EXAME_AGENDADO' ? 'Exame agendado' : 'Agendamento']);
+    if (c.agendamento.hospital) {
+      linhas.push(['Hospital', c.agendamento.hospital.nome]);
+      linhas.push(['Endereço', c.agendamento.hospital.endereco]);
+    }
     linhas.push(['Data e horário', `${dataBr(c.agendamento.data)} às ${c.agendamento.horario}`]);
     linhas.push(['Serviço', c.agendamento.servico]);
     linhas.push(['Próxima etapa', c.agendamento.proximaEtapa]);

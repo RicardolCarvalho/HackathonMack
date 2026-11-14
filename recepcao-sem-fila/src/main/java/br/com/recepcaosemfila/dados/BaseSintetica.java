@@ -20,6 +20,17 @@ import java.util.Set;
  * As datas são relativas ao dia da execução, para a demo funcionar em qualquer data.
  */
 public final class BaseSintetica {
+    public record Hospital(String id, String nome, String endereco) {}
+    public static final List<Hospital> HOSPITAIS = List.of(
+            new Hospital("alberto", "Hospital Alberto Enstale", "Avenida das Palmeiras, 120 · Jardim Aurora"),
+            new Hospital("sao-lucas", "Hospital São Lucas", "Rua das Acácias, 85 · Vila Serena"),
+            new Hospital("12-maio", "Hospital 12 de Maio", "Avenida do Horizonte, 450 · Parque das Flores"));
+
+    public static Hospital hospital(String id) {
+        return HOSPITAIS.stream().filter(h -> h.id().equals(id)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Escolha um hospital válido."));
+    }
+
     public static final String FONTE_CADASTRO = "Base cadastral sintética";
     public static final String FONTE_AGENDA = "Agenda sintética da unidade";
     public static final String FONTE_GUIAS = "Base sintética de guias do convênio";
@@ -27,6 +38,8 @@ public final class BaseSintetica {
     private final Map<String, Paciente> pacientesPorCpf = new LinkedHashMap<>();
     private final Map<String, Pedido> pedidosPorPaciente = new LinkedHashMap<>();
     private final Map<String, Agendamento> agendamentosPorPaciente = new LinkedHashMap<>(); // começa vazio
+    private final Map<String, Agendamento> visitasPorTipo = new LinkedHashMap<>();
+    private final Map<String, Agendamento> examesPorPaciente = new LinkedHashMap<>();
     private final Map<String, Guia> guiasPorAgendamento = new LinkedHashMap<>();
 
     /** Grade da unidade fictícia, que funciona 24 horas: de 00:00 às 23:30, a cada 30 minutos. */
@@ -86,6 +99,53 @@ public final class BaseSintetica {
         guia(new Guia("G-2026-0003", "A3", "AUR-0003-2025", "Consulta eletiva", "AUTORIZADA", hoje.plusDays(10)));
         guia(new Guia("G-2026-0004", "A4", "HOR-0004-2026", "Exame de imagem", "PENDENTE", hoje.plusDays(25)));
         guia(new Guia("G-2026-0005", "A5", "AUR-0005-2026", "Consulta eletiva", "AUTORIZADA", hoje.plusDays(12)));
+        int i = 0;
+        for (Paciente p : pacientesPorCpf.values()) {
+            Pedido pedido = pedidosPorPaciente.get(p.id());
+            String servico = pedido.servico().contains("imagem") ? "Exame de imagem" : "Exame laboratorial";
+            String id = "EX-" + p.id();
+            Agendamento exame = new Agendamento(id, p.id(), hoje.plusDays(1), String.format("%02d:00", 9 + i),
+                    servico, LOCAL_DO_SERVICO.get(servico), HOSPITAIS.get(i % HOSPITAIS.size()).id(), "EXAME_AGENDADO");
+            examesPorPaciente.put(p.id(), exame);
+            Guia original = guiasPorAgendamento.get(pedido.agendamentoId());
+            guia(new Guia("GE-" + p.id(), id, p.numeroCarteirinha(), servico, original.status(), original.validade()));
+            i++;
+        }
+    }
+
+    /** Exames já marcados pela unidade fictícia; cadastrar uma conta não cria um exame. */
+    public List<Agendamento> exames(String pacienteId, LocalDate hoje) {
+        Agendamento exame = examesPorPaciente.get(pacienteId);
+        return exame != null && !exame.data().isBefore(hoje) ? List.of(exame) : List.of();
+    }
+
+    public Agendamento selecionarExame(String pacienteId, String exameId, LocalDate hoje) {
+        Agendamento exame = exames(pacienteId, hoje).stream().filter(e -> e.id().equals(exameId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Exame agendado não encontrado para esta conta."));
+        registrarVisita(pacienteId, exame);
+        return exame;
+    }
+
+    public Agendamento preverChegada(String pacienteId, LocalDate dia, String horario, String hospitalId) {
+        hospital(hospitalId);
+        Agendamento visita = new Agendamento("PS-" + pacienteId, pacienteId, dia, horario,
+                "Pronto-socorro", "Triagem presencial", hospitalId, "PRONTO_SOCORRO");
+        registrarVisita(pacienteId, visita);
+        return visita;
+    }
+
+    private void registrarVisita(String pacienteId, Agendamento visita) {
+        agendamentosPorPaciente.put(pacienteId, visita); // última visita selecionada, para clientes antigos
+        visitasPorTipo.put(pacienteId + ":" + visita.tipo(), visita);
+    }
+
+    public Optional<Agendamento> visitaDoTipo(String pacienteId, String tipo, LocalDate hoje) {
+        Agendamento visita = visitasPorTipo.get(pacienteId + ":" + tipo);
+        return Optional.ofNullable(visita != null && !visita.data().isBefore(hoje) ? visita : null);
+    }
+
+    public List<Agendamento> visitas(String pacienteId, LocalDate hoje) {
+        return visitasPorTipo.values().stream().filter(a -> a.pacienteId().equals(pacienteId) && !a.data().isBefore(hoje)).toList();
     }
 
     private void paciente(Paciente p) { pacientesPorCpf.put(digitos(p.cpf()), p); }
@@ -121,12 +181,17 @@ public final class BaseSintetica {
      * Ocupados: os de outros pacientes da base no mesmo serviço e uma ocupação fictícia fixa por dia e serviço.
      */
     public List<Horario> horarios(String pacienteId, LocalDate dia, LocalDate hoje, LocalTime agora) {
+        return horarios(pacienteId, dia, hoje, agora, "alberto");
+    }
+
+    public List<Horario> horarios(String pacienteId, LocalDate dia, LocalDate hoje, LocalTime agora, String hospitalId) {
+        hospital(hospitalId);
         Pedido pedido = pedidosPorPaciente.get(pacienteId);
         if (pedido == null || dia.isBefore(hoje)) return List.of();
         Agendamento proprio = agendamentosPorPaciente.get(pacienteId);
         Set<String> ocupados = new HashSet<>();
-        for (Agendamento a : agendamentosPorPaciente.values()) {
-            if (!a.pacienteId().equals(pacienteId) && a.servico().equals(pedido.servico()) && a.data().equals(dia)) {
+        for (Agendamento a : visitasPorTipo.values()) {
+            if (!"PRONTO_SOCORRO".equals(a.tipo()) && !a.pacienteId().equals(pacienteId) && a.servico().equals(pedido.servico()) && a.data().equals(dia) && a.hospitalId().equals(hospitalId)) {
                 ocupados.add(a.horario());
             }
         }
@@ -134,7 +199,7 @@ public final class BaseSintetica {
         for (int i = 0; i < GRADE.size(); i++) {
             String h = GRADE.get(i);
             if (dia.equals(hoje) && !LocalTime.parse(h).isAfter(agora)) continue;
-            boolean atual = proprio != null && proprio.data().equals(dia) && h.equals(proprio.horario());
+            boolean atual = proprio != null && proprio.hospitalId().equals(hospitalId) && proprio.data().equals(dia) && h.equals(proprio.horario());
             boolean livre = !atual && !ocupados.contains(h) && !ocupadoFicticio(pedido.servico(), dia, i);
             l.add(new Horario(h, livre, atual));
         }
@@ -148,15 +213,21 @@ public final class BaseSintetica {
 
     /** Marca (ou troca) a visita do paciente. Quem chama valida antes, com {@link #horarios}. */
     public Agendamento agendar(String pacienteId, LocalDate dia, String horario) {
+        return agendar(pacienteId, dia, horario, "alberto");
+    }
+
+    public Agendamento agendar(String pacienteId, LocalDate dia, String horario, String hospitalId) {
+        hospital(hospitalId);
         Pedido p = pedidosPorPaciente.get(pacienteId);
-        Agendamento novo = new Agendamento(p.agendamentoId(), pacienteId, dia, horario, p.servico(), p.proximaEtapa());
-        agendamentosPorPaciente.put(pacienteId, novo);
+        Agendamento novo = new Agendamento(p.agendamentoId(), pacienteId, dia, horario, p.servico(), p.proximaEtapa(), hospitalId);
+        registrarVisita(pacienteId, novo);
         return novo;
     }
 
     /** Apaga os horários marcados (usado ao zerar a demo): todos voltam a não ter visita marcada. */
     public void reiniciarAgenda() {
         agendamentosPorPaciente.clear();
+        visitasPorTipo.clear();
     }
 
     /**
@@ -181,6 +252,7 @@ public final class BaseSintetica {
             pedidosPorPaciente.remove(id);
             agendamentosPorPaciente.remove(id);
         }
+        visitasPorTipo.values().removeIf(a -> cadastradosNoPortal.contains(a.pacienteId()));
         cadastradosNoPortal.clear();
     }
 

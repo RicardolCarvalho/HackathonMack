@@ -3,7 +3,7 @@
   --tinta: #102a35;
   --tinta-suave: #556a73;
   --tinta-fraca: #8a9ba2;
-  --fundo: #f1f5f6;
+  --fundo: #f4f7fa;
   --papel: #ffffff;
   --linha: #e2e9ec;
   --linha-forte: #c8d5da;
@@ -21,7 +21,7 @@
   --senha: #c7d9ff;
   --senha-clara: #e6eeff;
   --senha-forte: #3d6bd4;
-  --raio: 20px;
+  --raio: 18px;
   --raio-p: 12px;
   --raio-m: 16px;
   --sombra: 0 1px 2px rgba(16, 42, 53, 0.05), 0 8px 24px -10px rgba(16, 42, 53, 0.16);
@@ -621,3 +621,58 @@ tr.falhou td { background: var(--pendencia-fundo); }
   .previa-imagem.lendo::after, .digitando i { animation: none; }
   * { transition: none !important; }
 }
+
+/* Hospital selection and a quieter, consistent portal surface. */
+.faixa { background: radial-gradient(ellipse at 100% 0%, rgba(75, 155, 163, .24), transparent 65%), #103c49; padding-bottom: 100px; }
+.barra { padding-top: 22px; padding-bottom: 22px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.faixa-conteudo { padding-top: 28px; }
+.faixa-conteudo h1 { font-weight: 650; letter-spacing: -.035em; line-height: 1.18; }
+.faixa-conteudo .sub { line-height: 1.65; color: #d3e2e7; }
+.cartao { border: 1px solid #e0e7ed; box-shadow: 0 4px 24px -12px rgba(19, 47, 62, .2); padding: 28px; margin-bottom: 20px; }
+.cartao.discreto { background: #edf2f6; border: 1px solid #dce5eb; }
+button.primario, button.sucesso { box-shadow: none; }
+button { min-height: 46px; }
+.campo label { color: #334c59; }
+.rodape { line-height: 1.8; }
+.fluxo-agenda > * + *, .escolha-hospital > * + * { margin-top: 22px; }
+.abas-agenda { display: flex; gap: 8px; padding: 5px; border-radius: 12px; background: #f0f4f7; }
+.abas-agenda button { flex: 1; color: var(--tinta-suave); background: transparent; border: 1px solid transparent; font-size: .88rem; min-height: 42px; padding: 9px 10px; box-shadow: none; }
+.abas-agenda button span { font-size: .72rem; opacity: .7; }
+.abas-agenda button[aria-current="step"] { color: var(--marca); background: white; border-color: #dce5eb; box-shadow: 0 2px 5px rgba(19,47,62,.04); }
+.abas-agenda button:disabled { opacity: .45; }
+.lista-hospitais { display: grid; gap: 12px; }
+button.hospital-opcao { width: 100%; display: grid; grid-template-columns: 46px minmax(0, 1fr) 24px; gap: 16px; text-align: left; align-items: center; background: white; color: var(--tinta); border: 1.5px solid #dce5eb; border-radius: 14px; padding: 20px; }
+button.hospital-opcao:hover { background: #f8fbfc; border-color: #8babb6; }
+button.hospital-opcao[aria-pressed="true"] { background: #eff8f7; border-color: #16776d; box-shadow: 0 0 0 1px #16776d; }
+.hospital-simbolo { display: grid; place-items: center; width: 46px; height: 46px; background: #e9f1f5; color: var(--marca); border-radius: 12px; }
+.hospital-opcao[aria-pressed="true"] .hospital-simbolo { background: #d9eeea; color: #126459; }
+.hospital-descricao { display: grid; gap: 5px; }
+.hospital-categoria { color: var(--tinta-suave); font-size: .69rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+.hospital-descricao strong { font-size: 1rem; font-weight: 650; }
+.hospital-endereco { display: flex; gap: 5px; align-items: flex-start; font-size: .8rem; font-weight: 400; color: var(--tinta-suave); line-height: 1.6; }
+.hospital-endereco .icone { width: 15px; height: 15px; margin-top: 3px; }
+.hospital-radio { width: 23px; height: 23px; border: 1.5px solid #bbcad1; border-radius: 50%; display: grid; place-items: center; }
+[aria-pressed="true"] > .hospital-radio { background: #16776d; border-color: #16776d; color: white; }
+.hospital-radio .icone { width: 15px; height: 15px; }
+.hospital-resumo { display: flex; gap: 12px; padding: 16px; background: #f2f6f8; border: 1px solid #e0e8ed; border-radius: 12px; margin-bottom: 18px; }
+.hospital-resumo > .icone { color: var(--marca); margin-top: 2px; }
+.hospital-resumo strong { font-size: .9rem; }
+.hospital-resumo p { font-size: .8rem; color: var(--tinta-suave); margin-top: 3px; }
+@media (max-width: 600px) {
+  .cartao { padding: 22px 18px; }
+  .barra { padding: 16px; }
+  .faixa-conteudo { padding-top: 22px; }
+  button.hospital-opcao { grid-template-columns: 36px minmax(0, 1fr) 21px; gap: 10px; padding: 16px 12px; }
+  .hospital-simbolo { width: 36px; height: 40px; border-radius: 10px; }
+  .hospital-descricao strong { font-size: .92rem; }
+  .abas-agenda button { font-size: .8rem; padding: 9px 6px; }
+}
+
+.tipos-atendimento { display:grid; gap:14px; }
+button.tipo-opcao { display:grid; grid-template-columns:42px minmax(0,1fr) 20px; width:100%; gap:16px; text-align:left; padding:24px 20px; background:white; color:var(--tinta); border:1.5px solid var(--linha-forte); }
+button.tipo-opcao:hover { border-color:var(--marca); background:#f4f9fa; }
+.tipo-texto { display:grid; gap:8px; }
+.tipo-texto strong { font-size:1.1rem; font-weight:650; }
+.tipo-texto > span { font-size:.9rem; color:var(--tinta-suave); font-weight:400; line-height:1.6; }
+.tipo-texto small { font-size:.76rem; color:var(--marca); font-weight:500; }
+@media(max-width:600px) { button.tipo-opcao { padding:20px 14px; grid-template-columns:36px minmax(0,1fr) 18px; gap:12px; } .tipo-opcao .selo-icone { width:36px; height:38px; } }
