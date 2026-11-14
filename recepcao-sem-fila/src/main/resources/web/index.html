@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a3541">
   <title>Check-in | Recepção Sem Fila</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -10,23 +11,33 @@
   <link rel="stylesheet" href="/estilo.css">
 </head>
 <body>
-  <header class="topo">
-    <span class="marca-nome"><span class="logo" aria-hidden="true">✓</span>Recepção Sem Fila</span>
-    <a href="/atendimento" target="_blank" rel="noopener">Painel de atendimento ↗</a>
-  </header>
-  <div class="aviso-sintetico">Demonstração com dados sintéticos. Não envie documentos reais.</div>
-
-  <main class="paciente">
-    <ol class="trilha" id="trilha" aria-label="Etapas do check-in"></ol>
-    <div id="tela" aria-live="polite"></div>
-  </main>
-
-  <div class="ajuda-fixa" id="barra-ajuda" hidden>
-    <div class="dentro">
-      <span>Algo não está certo?</span>
-      <button class="secundario" id="abrir-ajuda">Falar com uma pessoa</button>
+  <div class="faixa">
+    <header class="barra">
+      <div class="marca"><span class="logo" id="logo"></span>Recepção Sem Fila</div>
+      <div class="barra-direita">
+        <span class="selo-demo" title="Não envie documentos reais">Demonstração · dados sintéticos</span>
+        <span class="conta-topo" id="conta-topo" hidden>
+          <span class="avatar-mini" id="iniciais" aria-hidden="true"></span>
+          <span id="nome-conta"></span>
+          <button class="sair" id="sair" type="button">Sair</button>
+        </span>
+      </div>
+    </header>
+    <div class="faixa-conteudo">
+      <div id="cabecalho"></div>
+      <ol class="trilha" id="trilha" aria-label="Etapas do check-in" hidden></ol>
     </div>
   </div>
+
+  <main class="paciente">
+    <div id="tela" aria-live="polite"></div>
+    <p class="rodape">
+      Demonstração com dados sintéticos: não envie documentos reais.
+      <a href="/atendimento" target="_blank" rel="noopener">Abrir painel de atendimento</a>
+    </p>
+  </main>
+
+  <button class="ajuda-flutuante" id="abrir-ajuda" type="button" hidden>Falar com uma pessoa</button>
 
   <dialog id="dialogo-ajuda" aria-labelledby="titulo-ajuda">
     <h2 id="titulo-ajuda">Falar com uma pessoa</h2>
@@ -36,7 +47,7 @@
       <textarea id="motivo-ajuda" maxlength="200"></textarea>
     </div>
     <div class="acoes">
-      <button id="confirmar-ajuda">Pedir apoio presencial</button>
+      <button id="confirmar-ajuda" class="primario">Pedir apoio presencial</button>
       <button class="secundario" id="cancelar-ajuda">Voltar ao check-in</button>
     </div>
   </dialog>

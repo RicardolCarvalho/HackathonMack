@@ -42,11 +42,8 @@ public final class LeitorSvgSimulado implements LeitorDocumento {
                 if (legivel(valor) && !ROTULOS.containsKey(semAcento(valor))) campos.put(campo, valor);
             }
         }
-        List<String> obrigatorios = tipo == TipoDocumento.IDENTIDADE
-                ? List.of(NOME, CPF, NASCIMENTO)
-                : List.of(CONVENIO, NUMERO_CARTEIRINHA, VALIDADE);
         List<String> ausentes = new ArrayList<>();
-        for (String c : obrigatorios) if (!campos.containsKey(c)) ausentes.add(c);
+        for (String c : LeitorDocumento.obrigatorios(tipo)) if (!campos.containsKey(c)) ausentes.add(c);
         return new DocumentoLido(tipo, campos, ausentes, FONTE);
     }
 
