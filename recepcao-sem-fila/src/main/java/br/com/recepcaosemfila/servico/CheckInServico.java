@@ -355,7 +355,7 @@ public final class CheckInServico {
     public synchronized Map<String, Object> metricas() {
         int total = checkIns.size(), emAndamento = 0, auto = 0, remoto = 0, aPedido = 0, passagens = 0;
         int avaliados = 0, corretos = 0, semGabarito = 0, corrigidos = 0, reenvios = 0;
-        List<Double> tempos = new ArrayList<>(), temposAuto = new ArrayList<>(), temposEscalados = new ArrayList<>();
+        List<Double> tempos = new ArrayList<>(), temposEscalados = new ArrayList<>();
 
         for (CheckIn c : checkIns.values()) {
             if (c.status == CONCLUIDO) passagens++;
@@ -365,7 +365,7 @@ public final class CheckInServico {
             Double t = c.tempoAteDesfechoSeg();
             tempos.add(t);
             switch (c.desfechoInicial) {
-                case CONCLUIDO_AUTOMATICO -> { auto++; temposAuto.add(t); }
+                case CONCLUIDO_AUTOMATICO -> auto++;
                 case ESCALADO_REMOTO -> { remoto++; temposEscalados.add(t); }
                 case APOIO_PRESENCIAL_A_PEDIDO -> aPedido++;
             }
@@ -387,7 +387,6 @@ public final class CheckInServico {
         m.put("passagensRegistradas", passagens);
         m.put("tempoMedioAteDesfechoSeg", media(tempos));
         m.put("tempoMedianoAteDesfechoSeg", mediana(tempos));
-        m.put("tempoMedioConcluidoAutomaticoSeg", media(temposAuto));
         m.put("tempoMedioAteEscalarSeg", media(temposEscalados));
         m.put("decisoesAvaliadas", avaliados);
         m.put("decisoesCorretas", corretos);
