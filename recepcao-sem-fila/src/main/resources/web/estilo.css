@@ -97,7 +97,7 @@ button.largo { width: 100%; }
 button.compacto { padding: 7px 12px; font-size: 0.875rem; border-radius: 10px; }
 
 label { display: block; font-weight: 600; font-size: 0.875rem; margin-bottom: 6px; }
-input[type="text"], input[type="email"], input[type="password"], textarea {
+input[type="text"], input[type="email"], input[type="password"], input[type="date"], select, textarea {
   width: 100%;
   font: inherit;
   color: var(--tinta);
@@ -107,7 +107,7 @@ input[type="text"], input[type="email"], input[type="password"], textarea {
   background: #fbfcfd;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-input:focus, textarea:focus { outline: none; border-color: var(--marca); box-shadow: 0 0 0 4px rgba(14, 74, 90, 0.12); background: #fff; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--marca); box-shadow: 0 0 0 4px rgba(14, 74, 90, 0.12); background: #fff; }
 textarea { min-height: 84px; resize: vertical; }
 .campo { margin-bottom: 14px; }
 .erro { color: var(--erro); font-weight: 600; }
@@ -243,6 +243,12 @@ textarea { min-height: 84px; resize: vertical; }
 /* Login */
 .formulario > * + * { margin-top: 14px; }
 .formulario .campo { margin-bottom: 0; }
+
+/* Cadastro de conta nova */
+.campos-lado { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.formulario.cadastro h3 { margin: 24px 0 0; font-size: 1rem; }
+.formulario.cadastro h3:first-child { margin-top: 4px; }
+.dica { display: block; margin-top: 6px; font-size: 0.8rem; color: var(--tinta-suave); }
 .contas { display: grid; gap: 10px; }
 button.conta {
   display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center;
@@ -605,6 +611,7 @@ tr.falhou td { background: var(--pendencia-fundo); }
   button.conta .chip { grid-column: 2; justify-self: start; }
   .visita-hora { font-size: 2.2rem; }
   .chips-dia { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .campos-lado { grid-template-columns: 1fr; }
   .trilha li { font-size: 0.7rem; }
   .painel { padding: 20px 16px 48px; }
   .painel > section { padding: 18px; }

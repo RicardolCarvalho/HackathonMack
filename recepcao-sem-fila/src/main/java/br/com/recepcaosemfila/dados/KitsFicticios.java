@@ -1,11 +1,14 @@
 package br.com.recepcaosemfila.dados;
 
+import br.com.recepcaosemfila.dominio.Paciente;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Documentos fictícios da demo, gerados como imagem SVG a partir de dados sintéticos.
@@ -34,6 +37,7 @@ public final class KitsFicticios {
 
     private final Map<String, Kit> kits = new LinkedHashMap<>();
     private final Map<String, Kit> correcoes = new LinkedHashMap<>(); // versões corretas, usadas no reenvio
+    private final Map<String, Kit> doCadastro = new ConcurrentHashMap<>(); // gerados para contas criadas no portal
 
     public KitsFicticios(LocalDate hoje) {
         add(new Kit("ana", "Ana Beatriz", "Tudo confere com o cadastro.", "CONCLUIR", null,
@@ -67,8 +71,28 @@ public final class KitsFicticios {
     private void add(Kit k) { kits.put(k.id(), k); }
     private void correcao(Kit k) { correcoes.put(k.id(), k); }
 
-    /** Kit principal (listado na demo) ou versão corrigida (usada no reenvio). */
-    public Kit kit(String id) { return kits.containsKey(id) ? kits.get(id) : correcoes.get(id); }
+    /** Kit principal (listado na demo), versão corrigida (usada no reenvio) ou gerado para um cadastro do portal. */
+    public Kit kit(String id) {
+        if (id == null) return null;
+        if (kits.containsKey(id)) return kits.get(id);
+        return correcoes.containsKey(id) ? correcoes.get(id) : doCadastro.get(id);
+    }
+
+    /**
+     * Documentos fictícios de exemplo para uma conta criada no portal, com os dados que o próprio paciente
+     * cadastrou. Sem gabarito: o caso não entra na avaliação das decisões do sistema.
+     */
+    public Kit kitDoCadastro(Paciente p) {
+        Kit k = new Kit("cadastro-" + p.id().toLowerCase(), p.nome().split(" ")[0],
+                "Documentos gerados a partir do cadastro feito no portal.", null, null,
+                p.nome(), p.cpf(), p.nascimento().format(BR),
+                p.convenio(), p.numeroCarteirinha(), p.validadeCarteirinha().format(BR));
+        doCadastro.put(k.id(), k);
+        return k;
+    }
+
+    /** Apaga os documentos gerados para contas do portal (usado ao zerar a demo). */
+    public void reiniciarCadastros() { doCadastro.clear(); }
 
     public List<Map<String, Object>> lista() {
         List<Map<String, Object>> l = new ArrayList<>();
@@ -113,7 +137,7 @@ public final class KitsFicticios {
               <text x="28" y="266" font-size="20" font-weight="bold" fill="#ffffff">%s</text>
               <text x="400" y="240" font-size="11" fill="#9cc3cf">VALIDADE</text>
               <text x="400" y="266" font-size="20" font-weight="bold" fill="#ffffff">%s</text>
-              <text x="320" y="340" font-size="22" font-weight="bold" fill="#ffd23f" fill-opacity="0.8" text-anchor="middle">CARTEIRINHA FICTÍCIA, SEM VALOR</text>
+              <text x="320" y="340" font-size="22" font-weight="bold" fill="#c7d9ff" fill-opacity="0.85" text-anchor="middle">CARTEIRINHA FICTÍCIA, SEM VALOR</text>
               <text x="320" y="372" font-size="11" fill="#9cc3cf" text-anchor="middle">Gerado para o Hack Inova Health AI. Dados sintéticos.</text>
             </svg>
             """.formatted(valor(k.convenio()), valor(k.nome()), valor(k.numeroCarteirinha()), valor(k.validade()));
