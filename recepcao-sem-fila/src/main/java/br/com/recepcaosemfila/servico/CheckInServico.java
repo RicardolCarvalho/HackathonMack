@@ -36,6 +36,9 @@ import static br.com.recepcaosemfila.dominio.StatusCheckIn.PRONTO_PARA_CHEGADA;
  *                                                                   -> APOIO_PRESENCIAL
  *   qualquer estado aberto -> (paciente pede ajuda) APOIO_PRESENCIAL -> CONCLUIDO (registrado por uma pessoa)
  *
+ *   O apoio presencial é marcado para o horário da visita. A senha de apoio só sai quando o paciente confirma a
+ *   chegada ao hospital (como a senha do fluxo normal), e só depois disso uma pessoa registra o atendimento.
+ *
  * O sistema nunca "resolve" uma exceção sozinho: toda falha vai para uma pessoa, com nome e observação registrados.
  */
 public final class CheckInServico {
@@ -121,7 +124,12 @@ public final class CheckInServico {
             for (CheckIn c : checkIns.values()) {
                 if (conta.id().equals(c.contaId) && c.status != CONCLUIDO) {
                     if (c.agendamento != null) c.agendamento = novo;
-                    evento(c, "PACIENTE", "Trocou o horário da visita para " + escolhido + ".");
+                    String apoio = "";
+                    if (c.status == APOIO_PRESENCIAL) {
+                        c.horarioApoio = escolhido;
+                        apoio = " O atendimento no balcão passa para o mesmo horário.";
+                    }
+                    evento(c, "PACIENTE", "Trocou o horário da visita para " + escolhido + "." + apoio);
                 }
             }
         }
@@ -272,8 +280,20 @@ public final class CheckInServico {
         return c;
     }
 
+    /**
+     * O paciente confirma que chegou ao hospital e recebe a senha. No fluxo normal, registra a passagem.
+     * No apoio presencial, a senha de apoio só sai agora (não quando o apoio foi marcado), e uma pessoa
+     * conclui o atendimento no balcão.
+     */
     public synchronized CheckIn registrarChegada(String id) {
         CheckIn c = buscar(id);
+        if (c.status == APOIO_PRESENCIAL) {
+            if (c.senha != null) throw new RegraException(409, "A chegada já foi registrada. Senha de apoio " + c.senha + ".");
+            c.senha = String.format("P-%03d", ++senhasApoio);
+            evento(c, "PACIENTE", "Chegou ao hospital para o apoio no balcão"
+                    + (c.horarioApoio == null ? "" : " marcado às " + c.horarioApoio) + ". Senha de apoio " + c.senha + ".");
+            return c;
+        }
         exigir(c, PRONTO_PARA_CHEGADA);
         c.status = CONCLUIDO;
         c.concluidoEm = relogio.instant();
@@ -287,13 +307,63 @@ public final class CheckInServico {
         if (c.status == CONCLUIDO) throw new RegraException(409, "Este check-in já foi concluído.");
         if (c.status == APOIO_PRESENCIAL) return c;
         c.ajudaPedidaPeloPaciente = true;
+        c.statusAntesDaAjuda = c.status;
         c.status = APOIO_PRESENCIAL;
-        c.senha = String.format("P-%03d", ++senhasApoio);
+        c.horarioApoio = horarioDoApoio(c);
         desfecho(c, Desfecho.APOIO_PRESENCIAL_A_PEDIDO);
         String texto = motivo == null || motivo.isBlank() ? "sem motivo informado" : motivo.trim();
-        c.motivos.add("Paciente pediu ajuda de uma pessoa: " + texto + ".");
-        evento(c, "PACIENTE", "Pediu apoio presencial (" + texto + "). Senha de apoio " + c.senha + ".");
+        c.motivos.add(MOTIVO_AJUDA + texto + ".");
+        evento(c, "PACIENTE", "Pediu apoio presencial (" + texto + "). Atendimento no balcão "
+                + quandoNoBalcao(c.horarioApoio) + ". " + SENHA_NA_CHEGADA);
         return c;
+    }
+
+    /**
+     * O paciente desiste do apoio que ele mesmo pediu, antes de chegar, e volta para onde estava no check-in.
+     * Nada é aprovado: um caso que estava com o atendimento remoto continua lá. Se o pedido de ajuda tinha sido
+     * o primeiro desfecho, ele deixa de contar; o pedido e a desistência ficam no histórico.
+     * Apoio definido pelo atendimento, ou com a chegada já registrada, só uma pessoa muda.
+     */
+    public synchronized CheckIn cancelarAjuda(String id) {
+        CheckIn c = buscar(id);
+        exigir(c, APOIO_PRESENCIAL);
+        if (!c.ajudaPedidaPeloPaciente || c.statusAntesDaAjuda == null) {
+            throw new RegraException(409, "O apoio presencial foi definido pelo atendimento; só uma pessoa pode mudar isso.");
+        }
+        if (c.senha != null) throw new RegraException(409, "A chegada já foi registrada; o atendimento continua no balcão.");
+        c.status = c.statusAntesDaAjuda;
+        c.statusAntesDaAjuda = null;
+        c.ajudaPedidaPeloPaciente = false;
+        c.horarioApoio = null;
+        c.motivos.removeIf(m -> m.startsWith(MOTIVO_AJUDA));
+        if (c.desfechoInicial == Desfecho.APOIO_PRESENCIAL_A_PEDIDO) {
+            c.desfechoInicial = null;
+            c.desfechoEm = null;
+        }
+        evento(c, "PACIENTE", "Desistiu do apoio presencial antes de chegar e voltou ao check-in.");
+        return c;
+    }
+
+    private static final String MOTIVO_AJUDA = "Paciente pediu ajuda de uma pessoa: ";
+
+    /**
+     * O apoio presencial fica marcado para o horário da visita de hoje, não para o momento do pedido.
+     * Sem visita hoje, ou se o horário já passou, é assim que o paciente chegar (null).
+     * Fonte: agenda sintética (pela conta; sem conta, o agendamento achado na conferência).
+     */
+    private String horarioDoApoio(CheckIn c) {
+        LocalDate hoje = LocalDate.now(relogio);
+        Agendamento a = c.contaId != null
+                ? contas.agendamentoDeHoje(conta(c.contaId), hoje).orElse(null)
+                : c.agendamento != null && c.agendamento.data().equals(hoje) ? c.agendamento : null;
+        if (a == null || !LocalTime.parse(a.horario()).isAfter(LocalTime.now(relogio))) return null;
+        return a.horario();
+    }
+
+    private static final String SENHA_NA_CHEGADA = "A senha de apoio sai quando o paciente confirmar a chegada ao hospital.";
+
+    private static String quandoNoBalcao(String horario) {
+        return horario == null ? "assim que chegar (sem horário de visita à frente hoje)" : "às " + horario + ", horário da visita";
     }
 
     // ---------- Ações do atendimento (sempre com nome e observação) ----------
@@ -314,14 +384,18 @@ public final class CheckInServico {
         exigirRegistro(atendente, observacao);
         c.status = APOIO_PRESENCIAL;
         c.atendidoPor = atendente.trim();
-        c.senha = String.format("P-%03d", ++senhasApoio);
-        evento(c, "ATENDENTE " + c.atendidoPor, "Encaminhado ao apoio presencial, senha " + c.senha + ". Observação: " + observacao.trim());
+        c.horarioApoio = horarioDoApoio(c);
+        evento(c, "ATENDENTE " + c.atendidoPor, "Encaminhado ao apoio presencial, no balcão " + quandoNoBalcao(c.horarioApoio)
+                + ". " + SENHA_NA_CHEGADA + " Observação: " + observacao.trim());
         return c;
     }
 
     public synchronized CheckIn concluirPresencial(String id, String atendente, String observacao) {
         CheckIn c = buscar(id);
         exigir(c, APOIO_PRESENCIAL);
+        if (c.senha == null) {
+            throw new RegraException(409, "O paciente ainda não confirmou a chegada ao hospital (a senha de apoio sai na chegada).");
+        }
         exigirRegistro(atendente, observacao);
         c.status = CONCLUIDO;
         c.concluidoEm = relogio.instant();

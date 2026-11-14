@@ -142,6 +142,7 @@ public final class Servidor {
                     case "confirmar-guia" -> servico.confirmarGuia(id);
                     case "chegada" -> servico.registrarChegada(id);
                     case "ajuda" -> servico.pedirAjuda(id, texto(corpo, "motivo"));
+                    case "cancelar-ajuda" -> servico.cancelarAjuda(id);
                     default -> throw new RegraException(404, "Ação desconhecida.");
                 };
                 json(ex, 200, c.paraMapa(false));

@@ -43,8 +43,10 @@ public class CheckIn {
     public boolean corrigidoPeloPaciente;  // uma pendência de documento foi resolvida com reenvio do próprio paciente
 
     public boolean ajudaPedidaPeloPaciente;
+    public StatusCheckIn statusAntesDaAjuda; // para onde o paciente volta se desistir do apoio antes de chegar
     public String atendidoPor;
     public String senha;
+    public String horarioApoio;        // apoio presencial: horário da visita de hoje (null = assim que chegar)
 
     public CheckIn(String id, Instant criadoEm) {
         this.id = id;
@@ -93,6 +95,7 @@ public class CheckIn {
         m.put("ajudaPedidaPeloPaciente", ajudaPedidaPeloPaciente);
         m.put("atendidoPor", atendidoPor);
         m.put("senha", senha);
+        m.put("horarioApoio", horarioApoio);
         m.put("nomeLido", nomeLido);
         m.put("cpfLido", mascararCpf(cpfLido));
 

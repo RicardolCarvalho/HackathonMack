@@ -33,6 +33,7 @@ const ICONES = {
   escudo: '<path d="M12 3 5 6v5.5c0 4.4 3 8 7 9.5 4-1.5 7-5.1 7-9.5V6l-7-3z"/><path d="m9 12 2.2 2.2L15.3 10"/>',
   recarregar: '<path d="M19.5 11A7.5 7.5 0 0 0 6.2 7L4.5 9M4.5 4.5V9H9M4.5 13a7.5 7.5 0 0 0 13.3 4l1.7-2M19.5 19.5V15H15"/>',
   seta: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  voltar: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
   chevron: '<path d="m9.5 6 6 6-6 6"/>',
   guia: '<path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/>',
   senha: '<path d="M4 7.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2V10a2 2 0 0 0 0 4v2.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V14a2 2 0 0 0 0-4V7.5z"/><path d="M14 5.5v13" stroke-dasharray="2 2"/>',

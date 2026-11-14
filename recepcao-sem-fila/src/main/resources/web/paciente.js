@@ -23,6 +23,9 @@ let erro = null;
 let ocupado = false;
 let consulta = null;
 let ultimaTela = null;
+let ajudaNaTela = false;   // a tela atual já mostra "Falar com uma pessoa" junto das opções (sem o botão flutuante)
+let noInicio = false;      // com um check-in aberto, o paciente voltou ao início da conta (por exemplo, para trocar o horário)
+let recado = null;         // aviso de uma tela só (por exemplo, apoio cancelado)
 
 const tela = document.getElementById('tela');
 const dialogoAjuda = document.getElementById('dialogo-ajuda');
@@ -35,6 +38,7 @@ async function executar(acao) {
   if (ocupado) return;
   ocupado = true;
   erro = null;
+  recado = null;
   desenhar();
   try {
     await acao();
@@ -50,6 +54,7 @@ async function executar(acao) {
 const entrar = (email, senha) => executar(async () => {
   conta = await api('POST', '/api/contas/entrar', { email, senha });
   checkIn = null;
+  noInicio = false;
   docs = vazios();
   escolhendoHorario = false;
   avisoHorario = null;
@@ -58,9 +63,11 @@ const entrar = (email, senha) => executar(async () => {
 function sair() {
   conta = null;
   checkIn = null;
+  noInicio = false;
   docs = vazios();
   novos = vazios();
   erro = null;
+  recado = null;
   guardar();
   desenhar();
 }
@@ -79,8 +86,32 @@ const trocarHorario = (horario) => executar(async () => {
 
 const comecar = () => executar(async () => {
   checkIn = await api('POST', '/api/checkins', { contaId: conta.id });
+  noInicio = false;
   docs = vazios();
   avisoHorario = null;
+});
+
+// ----- Voltar -----
+
+/** Dos documentos para o início da conta: o check-in continua aberto, com o que já foi lido. */
+function irParaInicio() {
+  noInicio = true;
+  erro = null;
+  recado = null;
+  desenhar();
+}
+
+function continuarCheckIn() {
+  noInicio = false;
+  escolhendoHorario = false;
+  avisoHorario = null;
+  desenhar();
+}
+
+/** Desiste do apoio no balcão (antes de chegar) e volta para a tela em que estava. */
+const cancelarApoio = () => executar(async () => {
+  checkIn = await api('POST', `/api/checkins/${checkIn.id}/cancelar-ajuda`);
+  recado = 'Você cancelou o apoio no balcão e voltou ao check-in. Se precisar, é só falar com uma pessoa de novo.';
 });
 
 /** Lê um documento assim que o arquivo é escolhido e guarda o que o leitor extraiu, para o paciente conferir. */
@@ -151,6 +182,7 @@ const registrarChegada = () => executar(async () => { checkIn = await api('POST'
 
 const voltarAoInicio = () => executar(async () => {
   checkIn = null;
+  noInicio = false;
   docs = vazios();
   novos = vazios();
   conta = await api('GET', `/api/contas/${conta.id}`);
@@ -159,7 +191,7 @@ const voltarAoInicio = () => executar(async () => {
 document.getElementById('logo').append(icone('mais'));
 document.getElementById('sair').addEventListener('click', sair);
 document.getElementById('abrir-ajuda').prepend(icone('conversa'));
-document.getElementById('abrir-ajuda').addEventListener('click', () => dialogoAjuda.showModal());
+document.getElementById('abrir-ajuda').addEventListener('click', () => abrirAjuda());
 document.getElementById('cancelar-ajuda').addEventListener('click', () => dialogoAjuda.close());
 document.getElementById('confirmar-ajuda').addEventListener('click', () => {
   const motivo = document.getElementById('motivo-ajuda').value;
@@ -168,6 +200,38 @@ document.getElementById('confirmar-ajuda').addEventListener('click', () => {
   executar(async () => { checkIn = await api('POST', `/api/checkins/${checkIn.id}/ajuda`, { motivo }); });
 });
 
+// ---------- Falar com uma pessoa ----------
+// O apoio presencial fica marcado para o horário da visita de hoje, não para a hora do pedido.
+
+function horarioDaVisita() {
+  const v = conta && conta.visitaHoje;
+  return v && !v.horarioPassou ? v.horario : null;
+}
+
+function textoApoio() {
+  const h = horarioDaVisita();
+  return h
+    ? `Uma pessoa da recepção atende você no balcão de apoio no horário da sua visita, hoje às ${h}.`
+    : 'Uma pessoa da recepção atende você no balcão de apoio assim que você chegar ao hospital.';
+}
+
+function abrirAjuda() {
+  const h = horarioDaVisita();
+  document.getElementById('texto-ajuda').textContent =
+    textoApoio() + ' Quando chegar ao hospital, toque em "Cheguei ao hospital" para receber a senha de apoio. O que você já fez no check-in fica guardado.';
+  document.getElementById('confirmar-ajuda').textContent = h ? `Marcar apoio para as ${h}` : 'Pedir apoio presencial';
+  dialogoAjuda.showModal();
+}
+
+/** "Falar com uma pessoa" como uma das opções da tela, junto das outras (sem o botão flutuante). */
+function opcaoPessoa(pergunta) {
+  ajudaNaTela = true;
+  return el('div', { class: 'opcao-pessoa' },
+    pergunta ? el('div', { class: 'ou' }, pergunta) : null,
+    el('button', { class: 'secundario largo', onclick: abrirAjuda, disabled: ocupado }, icone('pessoa'), 'Falar com uma pessoa'),
+    el('p', { class: 'suave pequeno' }, textoApoio()));
+}
+
 // ---------- Desenho ----------
 
 function desenhar() {
@@ -175,9 +239,10 @@ function desenhar() {
   desenharTrilha();
   const status = checkIn ? checkIn.status : null;
   let partes;
+  ajudaNaTela = false;
 
   if (!conta) partes = telaLogin();
-  else if (!checkIn) partes = telaInicioConta();
+  else if (!checkIn || noInicio) partes = telaInicioConta();
   else if (status === 'AGUARDANDO_DOCUMENTOS') partes = telaDocumentos();
   else if (status === 'AGUARDANDO_CONFIRMACAO_GUIA') partes = telaGuia();
   else if (status === 'PRONTO_PARA_CHEGADA') partes = telaPronto();
@@ -186,14 +251,15 @@ function desenhar() {
   else if (status === 'APOIO_PRESENCIAL') partes = telaPresencial();
   else partes = [];
 
-  if (checkIn && checkIn.verificacoes.length) partes.push(quadroConferencia());
+  if (checkIn && !noInicio && checkIn.verificacoes.length) partes.push(quadroConferencia());
+  if (recado) partes.unshift(aviso(recado, 'info', 'pessoa'));
   if (erro) partes.unshift(el('div', { class: 'aviso erro', role: 'alert' }, icone('alerta'), el('span', {}, erro)));
 
   tela.replaceChildren(...partes.filter(Boolean));
-  document.getElementById('abrir-ajuda').hidden = !checkIn || status === 'CONCLUIDO' || status === 'APOIO_PRESENCIAL';
+  document.getElementById('abrir-ajuda').hidden = !checkIn || noInicio || ajudaNaTela || status === 'CONCLUIDO' || status === 'APOIO_PRESENCIAL';
 
   // Mudou de tela (não só de detalhe): volta ao topo, como numa navegação.
-  const chave = [conta && conta.id, status, checkIn && checkIn.reenvio.feitos].join('|');
+  const chave = [conta && conta.id, status, noInicio, checkIn && checkIn.reenvio.feitos, checkIn && checkIn.senha].join('|');
   if (chave !== ultimaTela) {
     ultimaTela = chave;
     window.scrollTo({ top: 0 });
@@ -201,10 +267,12 @@ function desenhar() {
   acompanhar();
 }
 
-function definirCabecalho(titulo, subtitulo) {
-  document.getElementById('cabecalho').replaceChildren(
+/** Título da tela; `voltar` ({ rotulo, acao }) põe o botão de voltar à tela anterior acima do título. */
+function definirCabecalho(titulo, subtitulo, voltar) {
+  document.getElementById('cabecalho').replaceChildren(...[
+    voltar ? el('button', { class: 'voltar', type: 'button', onclick: voltar.acao, disabled: ocupado }, icone('voltar'), voltar.rotulo) : null,
     el('h1', {}, titulo),
-    subtitulo ? el('p', { class: 'sub' }, subtitulo) : null);
+    subtitulo ? el('p', { class: 'sub' }, subtitulo) : null].filter(Boolean));
 }
 
 function desenharTopo() {
@@ -215,14 +283,15 @@ function desenharTopo() {
 
 function desenharTrilha() {
   const trilha = document.getElementById('trilha');
-  trilha.hidden = !checkIn;
-  if (!checkIn) return;
+  trilha.hidden = !checkIn || noInicio;
+  if (trilha.hidden) return;
   let atual = 0;
   let parada = false;
   const falhas = checkIn.verificacoes.filter((v) => v.resultado === 'DIVERGENTE' || v.resultado === 'AUSENTE').map((v) => v.codigo);
   const etapaDaFalha = falhas.some((c) => c.startsWith('LEITURA')) ? 0
     : falhas.some((c) => !['GUIA', 'AGENDAMENTO'].includes(c)) ? 1
-    : falhas.length ? 2 : 0;
+    : falhas.length ? 2
+    : checkIn.verificacoes.length ? 2 : 0; // pediu ajuda depois da conferência (na guia) ou antes de enviar
   switch (checkIn.status) {
     case 'AGUARDANDO_CONFIRMACAO_GUIA': atual = 2; break;
     case 'PRONTO_PARA_CHEGADA': atual = 3; break;
@@ -357,32 +426,42 @@ function cartaoCheckIn() {
     ['escudo', 'A gente confere', 'Cadastro, carteirinha, agendamento e guia do convênio.'],
     ['senha', 'No hospital, pegue a senha', 'Sem passar pela fila da recepção.'],
   ];
+  const emAndamento = checkIn && noInicio; // voltou dos documentos: o check-in continua de onde parou
   return el('section', { class: 'cartao' },
-    el('h2', {}, 'Check-in antecipado'),
+    el('h2', {}, emAndamento ? 'Check-in em andamento' : 'Check-in antecipado'),
     el('ol', { class: 'passos' }, passos.map(([ic, titulo, texto]) =>
       el('li', {}, selo(ic), el('div', {}, el('strong', {}, titulo), el('div', { class: 'suave pequeno' }, texto))))),
-    el('button', { class: 'primario largo', onclick: comecar, disabled: ocupado }, 'Começar check-in', icone('seta')),
+    emAndamento
+      ? el('button', { class: 'primario largo', onclick: continuarCheckIn, disabled: ocupado }, 'Continuar check-in', icone('seta'))
+      : el('button', { class: 'primario largo', onclick: comecar, disabled: ocupado }, 'Começar check-in', icone('seta')),
     nota('Se algo não conferir, uma pessoa do atendimento assume o seu caso. Você pode pedir ajuda a qualquer momento.', 'pessoa'));
 }
 
 // ----- Documentos -----
 
 function telaDocumentos() {
-  definirCabecalho('Envie seus documentos', 'Uma imagem de cada. O assistente mostra o que leu para você conferir antes de enviar.');
+  definirCabecalho('Envie seus documentos', 'Uma imagem de cada. O assistente mostra o que leu para você conferir antes de enviar.',
+    { rotulo: 'Voltar', acao: irParaInicio });
   const exemplo = conta && conta.kitId;
   const partes = [
     slotDocumento(docs, 'IDENTIDADE', exemplo, 'Usar o documento fictício de exemplo'),
     slotDocumento(docs, 'CARTEIRINHA', exemplo, 'Usar a carteirinha fictícia de exemplo'),
   ];
   const lidos = docs.IDENTIDADE && docs.IDENTIDADE.leitura && docs.CARTEIRINHA && docs.CARTEIRINHA.leitura;
+  const comProblema = (d) => d && !d.lendo && (d.erro || (d.leitura && (!d.leitura.completo || d.leitura.alertas.length)));
+  const atencao = comProblema(docs.IDENTIDADE) || comProblema(docs.CARTEIRINHA);
   if (lidos) {
-    const atencao = [docs.IDENTIDADE, docs.CARTEIRINHA].some((d) => !d.leitura.completo || d.leitura.alertas.length);
     partes.push(el('section', { class: 'cartao acao-final' },
       atencao
-        ? aviso('Algo não ficou certo em um dos documentos. Você pode trocar o arquivo agora ou enviar assim: uma pessoa do atendimento confere.')
+        ? aviso('Algo não ficou certo em um dos documentos. Você pode trocar o arquivo, enviar assim (uma pessoa do atendimento confere) ou falar com uma pessoa.')
         : aviso('Tudo lido. Se os dados estiverem certos, envie para a conferência.', 'ok', 'check'),
-      el('button', { class: (atencao ? 'secundario' : 'sucesso') + ' largo', onclick: enviarParaConferencia, disabled: ocupado },
-        atencao ? 'Enviar assim mesmo' : 'Os dados estão certos, enviar', icone('seta'))));
+      el('button', { class: (atencao ? 'primario' : 'sucesso') + ' largo', onclick: enviarParaConferencia, disabled: ocupado },
+        atencao ? 'Enviar assim mesmo' : 'Os dados estão certos, enviar', icone('seta')),
+      atencao ? opcaoPessoa('ou') : null));
+  } else if (atencao) {
+    partes.push(el('section', { class: 'cartao acao-final' },
+      aviso('Algo não ficou certo neste documento. Você pode trocar o arquivo ou falar com uma pessoa.'),
+      opcaoPessoa()));
   } else {
     partes.push(nota('Os documentos são conferidos juntos, depois que os dois estiverem lidos.', 'escudo'));
   }
@@ -461,7 +540,7 @@ function telaRemoto() {
   const r = checkIn.reenvio;
   const podeReenviar = r.documentos.length > 0;
   definirCabecalho('Encontramos uma pendência', podeReenviar
-    ? 'Se for um documento vencido ou errado, envie o certo agora. Se preferir, aguarde: o atendimento já recebeu seu caso.'
+    ? 'Se for um documento vencido ou errado, envie o certo agora. Você também pode falar com uma pessoa ou só aguardar: o atendimento já recebeu seu caso.'
     : 'Uma pessoa do atendimento já recebeu seu caso e responde por aqui.');
 
   const partes = [
@@ -489,15 +568,18 @@ function telaRemoto() {
     }
     const prontos = r.documentos.filter((t) => novos[t] && novos[t].leitura);
     const lendo = r.documentos.some((t) => novos[t] && novos[t].lendo);
-    if (prontos.length) {
-      partes.push(el('section', { class: 'cartao acao-final' },
-        el('button', { class: 'sucesso largo', onclick: reenviar, disabled: ocupado || lendo },
-          icone('recarregar'), prontos.length > 1 ? 'Reenviar documentos para conferência' : 'Reenviar para conferência')));
-    }
-  } else if (r.feitos >= r.limite) {
-    partes.push(aviso(`Você já reenviou ${r.feitos} vezes. Agora uma pessoa do atendimento conclui o seu caso.`, 'info', 'pessoa'));
+    partes.push(el('section', { class: 'cartao acao-final' },
+      prontos.length
+        ? el('button', { class: 'sucesso largo', onclick: reenviar, disabled: ocupado || lendo },
+          icone('recarregar'), prontos.length > 1 ? 'Reenviar documentos para conferência' : 'Reenviar para conferência')
+        : null,
+      opcaoPessoa(prontos.length ? 'ou' : 'Prefere resolver com uma pessoa?')));
   } else {
-    partes.push(aviso('Essa pendência não se resolve com outro documento (por exemplo, guia ainda não autorizada pelo convênio). O atendimento cuida disso e responde aqui.', 'info', 'pessoa'));
+    partes.push(el('section', { class: 'cartao acao-final' },
+      r.feitos >= r.limite
+        ? aviso(`Você já reenviou ${r.feitos} vezes. Agora uma pessoa do atendimento conclui o seu caso e responde por aqui.`, 'info', 'pessoa')
+        : aviso('Essa pendência não se resolve com outro documento (por exemplo, guia ainda não autorizada pelo convênio). O atendimento cuida disso e responde aqui.', 'info', 'pessoa'),
+      opcaoPessoa('Prefere resolver no balcão?')));
   }
   return partes;
 }
@@ -519,7 +601,7 @@ function telaGuia() {
         el('dt', {}, 'Válida até'), el('dd', {}, dataBr(g.validade)),
         el('dt', {}, 'Visita'), el('dd', {}, `${a.servico}, hoje às ${a.horario}`)),
       el('button', { class: 'sucesso largo', onclick: confirmarGuia, disabled: ocupado }, icone('check'), 'Confirmar guia'),
-      nota('A guia não é essa? Use "Falar com uma pessoa".', 'pessoa')),
+      opcaoPessoa('A guia não é essa?')),
   ];
 }
 
@@ -561,16 +643,40 @@ function telaConcluido() {
 }
 
 function telaPresencial() {
-  definirCabecalho('Procure o balcão de apoio', checkIn.ajudaPedidaPeloPaciente
-    ? 'Seu pedido foi registrado. Uma pessoa da recepção vai atender você.'
-    : `${checkIn.atendidoPor || 'O atendimento'} pediu que seu caso seja concluído no balcão, com uma pessoa.`);
+  const h = checkIn.horarioApoio;
+  const quando = h ? `no horário da sua visita, hoje às ${h}` : 'assim que você chegar ao hospital';
+
+  // Como no fluxo normal, a senha só sai quando o paciente confirma que chegou ao hospital.
+  if (!checkIn.senha) {
+    const pediu = checkIn.ajudaPedidaPeloPaciente; // apoio definido pelo atendimento não se desfaz por aqui
+    definirCabecalho(h ? `Apoio no balcão às ${h}` : 'Apoio no balcão', pediu
+      ? `Seu pedido foi registrado. Uma pessoa da recepção atende você ${quando}.`
+      : `${checkIn.atendidoPor || 'O atendimento'} pediu que seu caso seja concluído no balcão, com uma pessoa, ${quando}.`,
+    pediu ? { rotulo: 'Voltar', acao: cancelarApoio } : null);
+    return [
+      el('section', { class: 'cartao' },
+        el('div', { class: 'resultado' }, selo('pessoa', 'grande'),
+          el('div', {}, el('h2', {}, 'Atendimento marcado no balcão'),
+            el('p', { class: 'suave' }, 'Quando chegar ao hospital, toque no botão abaixo para receber sua senha de apoio.'))),
+        el('div', { class: 'visita' },
+          el('div', { class: 'visita-hora' }, el('small', {}, 'Hoje'), h || 'Ao chegar'),
+          el('div', { class: 'visita-texto' },
+            el('div', { class: 'visita-servico' }, 'Apoio presencial'),
+            el('div', { class: 'suave pequeno com-icone' }, icone('local'), 'Balcão de apoio da recepção'))),
+        el('button', { class: 'sucesso largo', onclick: registrarChegada, disabled: ocupado }, icone('local'), 'Cheguei ao hospital'),
+        nota('O que você já enviou está com a recepção. Não precisa refazer nada.', 'escudo'),
+        pediu ? nota('Mudou de ideia? "Voltar" cancela o apoio no balcão e leva você de volta ao check-in.', 'voltar') : null),
+    ];
+  }
+
+  definirCabecalho('Procure o balcão de apoio', 'Sua chegada foi registrada. Apresente a senha no balcão de apoio da recepção.');
   return [
     el('section', { class: 'cartao' },
       el('div', { class: 'bilhete' },
         el('div', { class: 'rotulo-senha' }, 'Senha de apoio'),
         el('div', { class: 'numero' }, checkIn.senha),
         el('div', { class: 'destino' }, icone('pessoa'), 'Balcão de apoio da recepção')),
-      nota('O que você já enviou está com a recepção. Esta tela atualiza sozinha.', 'relogio')),
+      nota('Uma pessoa da recepção conclui seu check-in no balcão. Esta tela atualiza sozinha.', 'relogio')),
   ];
 }
 
@@ -626,6 +732,7 @@ function acompanhar() {
         if (novo.status !== checkIn.status) {
           checkIn = novo;
           novos = vazios();
+          recado = null;
           desenhar();
         }
       } catch (e) { /* servidor fora do ar: tenta de novo no próximo ciclo */ }

@@ -49,8 +49,18 @@ SVG enviado (por exemplo, salvo de `/api/kits/ana/identidade.svg`).
    o caso aparece no painel, em "Atendimento remoto", com o valor lido, o valor da base e a fonte de cada
    um → o atendente clica em "Resolver e liberar", informa nome e observação → a tela do paciente atualiza
    sozinha e ele confirma a chegada.
-3. **Atendimento humano acionado.** Em qualquer etapa, "Falar com uma pessoa" → senha de apoio P-001 →
-   o caso aparece em "Apoio presencial" → o atendente registra o atendimento no balcão.
+3. **Atendimento humano acionado.** Em qualquer etapa, "Falar com uma pessoa". Quando um documento dá
+   problema (na leitura ou na conferência) e na tela da guia, o botão aparece junto das outras opções da tela;
+   nas demais etapas, no canto → o apoio no balcão fica marcado para o **horário da visita de hoje**, não para a
+   hora do pedido → o caso aparece em "Apoio presencial", com o horário do balcão e em ordem de horário,
+   aguardando a chegada → como no fluxo normal, ao chegar o paciente toca em "Cheguei ao hospital" e só então
+   recebe a senha de apoio P-001 → o atendente registra o atendimento no balcão (só depois da chegada).
+
+**Voltar.** Na tela de documentos, "Voltar" leva ao início da conta (dá para trocar o horário) e o check-in
+continua de onde parou com "Continuar check-in". Com o apoio no balcão marcado pelo próprio paciente e antes da
+chegada, "Voltar" cancela o apoio e devolve o paciente à tela em que estava (um caso com pendência continua no
+atendimento remoto). Apoio definido pelo atendimento, ou com a chegada já registrada, não tem volta pela tela do
+paciente. As outras etapas não têm "Voltar" porque a conferência já foi feita.
 
 **Reenvio do documento certo.** Quando a pendência é de documento (vencido, divergente ou ilegível), o caso
 vai para o atendimento remoto como sempre, e o paciente ganha a opção "Resolver agora": envia o documento
@@ -74,7 +84,8 @@ O painel calcula as medidas só com os check-ins da execução atual. Nada é fi
   encaminhamento ao remoto ou pedido de apoio). Também guardamos o tempo total até a passagem registrada.
 - **Proporção de casos concluídos ou escalados corretamente:** cada kit fictício tem um gabarito
   (concluir ou encaminhar). Decisão correta = desfecho do sistema igual ao gabarito. Pedidos de ajuda do
-  paciente e arquivos enviados sem kit não entram na conta e são mostrados à parte.
+  paciente e arquivos enviados sem kit não entram na conta e são mostrados à parte. Um pedido de ajuda que o
+  paciente cancelou antes de chegar ("Voltar") deixa de contar como desfecho; o pedido continua no histórico.
 
 Essas medidas descrevem cenários sintéticos operados pela equipe na demo. Não são tempo de fila real nem
 comparação com a recepção atual: não temos linha de base medida (hipótese a verificar com um mentor).
@@ -102,6 +113,10 @@ Regras que valem em todo o fluxo:
   nem aprova exceção. O reenvio não muda isso: o documento novo passa pelas mesmas regras, e só segue se
   nenhuma falhar.
 - Toda ação do atendimento exige nome e observação e fica no histórico do caso.
+- O apoio presencial (pedido pelo paciente ou encaminhado pelo atendimento) é marcado para o horário da visita
+  de hoje, tirado da agenda sintética. Sem visita à frente hoje (por exemplo, o horário já passou), é assim que o
+  paciente chegar. Se o paciente troca o horário da visita, o apoio acompanha. A senha de apoio só sai quando o
+  paciente confirma a chegada ao hospital, como a senha do fluxo normal.
 - Cada conferência registra a fonte (OCR simulado, conta do paciente, base cadastral sintética, agenda, base de guias).
 - Com conta, o documento precisa ser do titular (mesmo CPF); sem CPF legível ou com CPF de outra pessoa, vai para uma pessoa.
 - A leitura de cada documento só mostra ao paciente o que foi lido do arquivo que ele mesmo enviou; não confere
@@ -131,8 +146,9 @@ troque a instância em `App.java`. Antes de depender do serviço, confirme acess
 | `POST /api/checkins/{id}/documentos` | corpo `{kitId?, identidadeSvg, carteirinhaSvg}`; lê e confere |
 | `POST /api/checkins/{id}/reenvio` | corpo `{identidadeSvg?, carteirinhaSvg?}`; com pendência de documento, confere de novo |
 | `POST /api/checkins/{id}/confirmar-guia` | paciente confirma a guia |
-| `POST /api/checkins/{id}/chegada` | registra a passagem e emite a senha |
-| `POST /api/checkins/{id}/ajuda` | corpo `{motivo?}`; aciona apoio presencial |
+| `POST /api/checkins/{id}/chegada` | registra a chegada e emite a senha (no apoio presencial, a senha de apoio) |
+| `POST /api/checkins/{id}/ajuda` | corpo `{motivo?}`; aciona apoio presencial no horário da visita (`horarioApoio`) |
+| `POST /api/checkins/{id}/cancelar-ajuda` | o paciente desiste do apoio que pediu, antes de chegar, e volta para onde estava |
 | `GET /api/atendimento/casos` | todos os casos, na visão do atendente (com valores da base e histórico) |
 | `POST /api/atendimento/casos/{id}/resolver` | corpo `{atendente, observacao}`; libera o check-in |
 | `POST /api/atendimento/casos/{id}/encaminhar-presencial` | corpo `{atendente, observacao}` |

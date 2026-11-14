@@ -73,6 +73,8 @@ function desenharCasos() {
 
   const atual = ABAS.find((a) => a.id === aba);
   const lista = casos.filter(atual.filtro);
+  // No apoio presencial, a ordem é a do horário marcado no balcão ("assim que chegar" primeiro).
+  if (aba === 'presencial') lista.sort((a, b) => (a.horarioApoio || '').localeCompare(b.horarioApoio || ''));
   document.getElementById('casos').replaceChildren(
     ...(lista.length ? lista.map(cartaoCaso) : [el('div', { class: 'vazio' }, atual.vazio)]));
 }
@@ -94,6 +96,10 @@ function cartaoCaso(c) {
             'check-in ' + c.id.slice(0, 8)].filter(Boolean).join(', '))),
       el('div', { class: 'pequeno' },
         c.senha ? el('div', {}, 'Senha ', el('strong', {}, c.senha)) : null,
+        c.status === 'APOIO_PRESENCIAL'
+          ? el('div', {}, 'Balcão ', el('strong', {}, c.horarioApoio ? 'às ' + c.horarioApoio : 'ao chegar'))
+          : null,
+        c.status === 'APOIO_PRESENCIAL' && !c.senha ? el('div', { class: 'suave' }, 'Aguardando chegada') : null,
         c.tempoAteDesfechoSeg !== null ? el('div', { class: 'suave' }, 'Desfecho em ' + segundos(c.tempoAteDesfechoSeg)) : null)),
     el('div', { class: 'corpo' },
       c.motivos.length ? el('div', {}, el('h3', {}, 'Por que está aqui'), el('ul', {}, c.motivos.map((m) => el('li', {}, m)))) : null,
@@ -116,6 +122,10 @@ function botoes(c) {
       el('button', { class: 'secundario', onclick: () => abrirAcao(c, 'encaminhar-presencial') }, 'Encaminhar ao apoio presencial'));
   }
   if (c.status === 'APOIO_PRESENCIAL') {
+    if (!c.senha) {
+      return el('p', { class: 'pequeno suave' },
+        `Aguardando o paciente confirmar a chegada ao hospital${c.horarioApoio ? ` (balcão marcado às ${c.horarioApoio})` : ''}. A senha de apoio sai na chegada; depois disso dá para registrar o atendimento.`);
+    }
     return el('div', { class: 'acoes' },
       el('button', { onclick: () => abrirAcao(c, 'concluir-presencial') }, 'Registrar atendimento presencial'));
   }

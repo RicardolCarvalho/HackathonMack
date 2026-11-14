@@ -40,7 +40,7 @@ public final class VerificaCenarios {
         teste("Divergente: nascimento diferente vai ao atendimento remoto e é resolvido por uma pessoa", VerificaCenarios::divergente);
         teste("Dado ausente: documento ilegível vai ao remoto e segue para apoio presencial", VerificaCenarios::dadoAusente);
         teste("Carteirinha vencida e guia não autorizada são encaminhadas", VerificaCenarios::carteirinhaEGuia);
-        teste("Atendimento humano: paciente pede ajuda e recebe senha de apoio", VerificaCenarios::ajudaHumana);
+        teste("Atendimento humano: paciente pede ajuda e recebe a senha de apoio ao chegar", VerificaCenarios::ajudaHumana);
         teste("Arquivo que não é documento fictício SVG é encaminhado, não aprovado", VerificaCenarios::arquivoInvalido);
         teste("Transições inválidas são recusadas", VerificaCenarios::transicoesInvalidas);
         teste("Métricas refletem só o que aconteceu na execução", VerificaCenarios::metricas);
@@ -50,6 +50,8 @@ public final class VerificaCenarios {
         teste("Horário: paciente escolhe um horário livre de hoje", VerificaCenarios::horarioDaVisita);
         teste("Reenvio: carteirinha vencida é trocada pelo paciente e o check-in segue", VerificaCenarios::reenvioResolve);
         teste("Reenvio: só para pendência de documento e com limite", VerificaCenarios::reenvioLimites);
+        teste("Apoio presencial fica marcado para o horário da visita, não para a hora do pedido", VerificaCenarios::apoioNoHorarioDaVisita);
+        teste("Voltar: paciente desiste do apoio antes de chegar e volta para onde estava", VerificaCenarios::voltarDoApoio);
         teste("JSON: escrita e leitura", VerificaCenarios::json);
         teste("CPFs da base sintética têm dígito verificador inválido", VerificaCenarios::cpfsFicticios);
 
@@ -112,8 +114,10 @@ public final class VerificaCenarios {
 
         servico.encaminharPresencial(c.id, "Bia", "Documento ilegível; conferir o original no balcão.");
         igual(StatusCheckIn.APOIO_PRESENCIAL, c.status);
-        verdade(c.senha.startsWith("P-"));
+        igual(null, c.senha); // a senha de apoio só sai na chegada
         verdade(!c.ajudaPedidaPeloPaciente);
+        servico.registrarChegada(c.id);
+        verdade(c.senha.startsWith("P-"));
 
         servico.concluirPresencial(c.id, "Rafa", "Documento original conferido no balcão.");
         igual(StatusCheckIn.CONCLUIDO, c.status);
@@ -136,13 +140,21 @@ public final class VerificaCenarios {
         igual(StatusCheckIn.APOIO_PRESENCIAL, c.status);
         igual(Desfecho.APOIO_PRESENCIAL_A_PEDIDO, c.desfechoInicial);
         verdade(c.ajudaPedidaPeloPaciente);
-        igual("P-001", c.senha);
         igual(null, c.decisaoCorreta()); // escolha do paciente não é avaliada como decisão do sistema
+
+        // A senha de apoio não sai no pedido: sai quando o paciente confirma a chegada, como no fluxo normal.
+        igual(null, c.senha);
+        recusa(409, () -> servico.concluirPresencial(c.id, "Rafa", "Paciente ainda não chegou."));
+        servico.registrarChegada(c.id);
+        igual("P-001", c.senha);
+        igual(StatusCheckIn.APOIO_PRESENCIAL, c.status); // uma pessoa ainda conclui no balcão
+        recusa(409, () -> servico.registrarChegada(c.id));
 
         // Pedir ajuda no meio do fluxo também funciona.
         CheckIn d = enviar("ana");
         servico.pedirAjuda(d.id, null);
         igual(StatusCheckIn.APOIO_PRESENCIAL, d.status);
+        servico.registrarChegada(d.id);
         servico.concluirPresencial(d.id, "Rafa", "Paciente atendida no balcão.");
         recusa(409, () -> servico.pedirAjuda(d.id, "de novo"));
     }
@@ -350,6 +362,75 @@ public final class VerificaCenarios {
         CheckIn tereza = enviar("tereza");
         servico.reenviar(tereza.id, kits.svgIdentidade(kits.kit("tereza-legivel")), null);
         igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, tereza.status);
+    }
+
+    private static void apoioNoHorarioDaVisita() {
+        LocalDate hoje = LocalDate.now();
+        BaseSintetica base = new BaseSintetica(hoje);
+        KitsFicticios k = new KitsFicticios(hoje);
+        CheckInServico s = new CheckInServico(relogio(hoje, 8, 10), new LeitorSvgSimulado(), new Conferencia(base), k, new ContasSinteticas(base));
+
+        // Pedido do paciente às 08:10: o balcão fica para o horário da visita da Ana (10:30).
+        ContasSinteticas.Conta ana = s.entrar("ana.beatriz@exemplo.test", ContasSinteticas.SENHA_DEMO);
+        CheckIn c = s.iniciar(ana.id());
+        s.pedirAjuda(c.id, "Prefiro falar com alguém");
+        igual("10:30", c.horarioApoio);
+        igual("10:30", c.paraMapa(false).get("horarioApoio"));
+        verdade(c.eventos.stream().anyMatch(e -> e.descricao().contains("às 10:30, horário da visita")));
+        // Trocar o horário da visita leva o apoio junto.
+        s.remarcar(ana.id(), "14:30");
+        igual("14:30", c.horarioApoio);
+
+        // Encaminhado pelo atendimento: também no horário da visita (Carlos, 11:00).
+        ContasSinteticas.Conta carlos = s.entrar("carlos.eduardo@exemplo.test", ContasSinteticas.SENHA_DEMO);
+        CheckIn d = s.iniciar(carlos.id());
+        s.enviarDocumentos(d.id, "carlos", k.svgIdentidade(k.kit("carlos")), k.svgCarteirinha(k.kit("carlos")));
+        s.encaminharPresencial(d.id, "Bia", "Conferir o documento original no balcão.");
+        igual("11:00", d.horarioApoio);
+
+        // Visita que já passou: o apoio é assim que o paciente chegar.
+        BaseSintetica base2 = new BaseSintetica(hoje);
+        CheckInServico noite = new CheckInServico(relogio(hoje, 19, 50), new LeitorSvgSimulado(), new Conferencia(base2), k, new ContasSinteticas(base2));
+        CheckIn e = noite.iniciar(noite.entrar("ana.beatriz@exemplo.test", ContasSinteticas.SENHA_DEMO).id());
+        noite.pedirAjuda(e.id, null);
+        igual(null, e.horarioApoio);
+        verdade(e.eventos.stream().anyMatch(x -> x.descricao().contains("assim que chegar")));
+    }
+
+    private static void voltarDoApoio() {
+        // Pediu ajuda na guia e voltou: segue o fluxo normal, e o pedido desfeito não conta como desfecho.
+        CheckIn ana = enviar("ana");
+        servico.pedirAjuda(ana.id, "dúvida na guia");
+        servico.cancelarAjuda(ana.id);
+        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, ana.status);
+        igual(null, ana.desfechoInicial);
+        verdade(!ana.ajudaPedidaPeloPaciente && ana.horarioApoio == null && ana.motivos.isEmpty());
+        verdade(ana.eventos.stream().anyMatch(e -> e.descricao().contains("Desistiu do apoio")));
+        servico.confirmarGuia(ana.id);
+        igual(Desfecho.CONCLUIDO_AUTOMATICO, ana.desfechoInicial);
+
+        // Com pendência: volta para o atendimento remoto, com o mesmo motivo e o mesmo desfecho.
+        CheckIn carlos = enviar("carlos");
+        servico.pedirAjuda(carlos.id, null);
+        servico.cancelarAjuda(carlos.id);
+        igual(StatusCheckIn.ATENDIMENTO_REMOTO, carlos.status);
+        igual(Desfecho.ESCALADO_REMOTO, carlos.desfechoInicial);
+        verdade(carlos.motivos.size() == 1 && !carlos.motivos.get(0).startsWith("Paciente pediu ajuda"));
+
+        // Depois da chegada, ou quando foi o atendimento que encaminhou, não dá para voltar.
+        CheckIn d = servico.iniciar();
+        servico.pedirAjuda(d.id, null);
+        servico.registrarChegada(d.id);
+        recusa(409, () -> servico.cancelarAjuda(d.id));
+        CheckIn tereza = enviar("tereza");
+        servico.encaminharPresencial(tereza.id, "Bia", "Conferir o original no balcão.");
+        recusa(409, () -> servico.cancelarAjuda(tereza.id));
+        recusa(409, () -> servico.cancelarAjuda(ana.id)); // não está no apoio presencial
+    }
+
+    private static Clock relogio(LocalDate dia, int hora, int minuto) {
+        ZoneId zona = ZoneId.systemDefault();
+        return Clock.fixed(dia.atTime(hora, minuto).atZone(zona).toInstant(), zona);
     }
 
     private static void json() {

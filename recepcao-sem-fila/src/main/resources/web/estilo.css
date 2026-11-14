@@ -366,6 +366,26 @@ button.horario:disabled { background: var(--fundo); border-color: transparent; c
 .cartao.acao-final { display: grid; gap: 12px; }
 .cartao.acao-final > * + * { margin-top: 0; }
 
+/* Voltar à tela anterior: fica acima do título, na faixa de topo. */
+button.voltar {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 0; box-shadow: none;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 6px 12px 6px 6px; margin: 0 0 10px -6px;
+  font-size: 0.9rem; font-weight: 600; border-radius: 999px;
+}
+button.voltar:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+button.voltar .icone { width: 18px; height: 18px; }
+
+/* "Falar com uma pessoa" como mais uma opção da tela, não no canto. */
+.opcao-pessoa { display: grid; gap: 8px; }
+.opcao-pessoa p { text-align: center; }
+.ou {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 0.85rem; color: var(--tinta-suave);
+}
+.ou::before, .ou::after { content: ""; flex: 1; height: 1px; background: var(--linha); }
+
 /* Resultado, pendências e conferência */
 .resultado { display: flex; gap: 16px; align-items: center; }
 .resultado > div > * + * { margin-top: 4px; }
