@@ -20,8 +20,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static br.com.recepcaosemfila.dominio.StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA;
 import static br.com.recepcaosemfila.dominio.StatusCheckIn.AGUARDANDO_DOCUMENTOS;
@@ -71,10 +73,81 @@ public final class CheckInServico {
 
     public ContasSinteticas.Conta entrar(String email, String senha) {
         ContasSinteticas.Conta c = contas.porEmail(email).orElse(null);
-        if (c == null || !ContasSinteticas.SENHA_DEMO.equals(senha)) {
+        if (c == null || !contas.senhaConfere(c, senha)) {
             throw new RegraException(401, "E-mail ou senha não conferem.");
         }
         return c;
+    }
+
+    /** O que o paciente preenche no cadastro do portal. Datas em AAAA-MM-DD. */
+    public record NovoCadastro(String nome, String cpf, String nascimento, String email, String senha,
+                               String convenio, String numeroCarteirinha, String validadeCarteirinha, String servico) {}
+
+    private static final int LIMITE_CONTAS_NOVAS = 50;
+    private static final Pattern EMAIL_FICTICIO = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.test$");
+
+    /**
+     * Cadastro simulado feito pelo próprio paciente no portal: só em memória e apagado ao zerar a demo. Só aceita
+     * dados fictícios (CPF com dígito verificador inválido e e-mail terminado em .test). O paciente novo não tem
+     * guia do convênio: a conferência aponta a falta e o caso vai para uma pessoa, como qualquer dado ausente.
+     */
+    public synchronized ContasSinteticas.Conta cadastrar(NovoCadastro d) {
+        LocalDate hoje = LocalDate.now(relogio);
+        String nome = limpo(d.nome());
+        if (nome.isEmpty() || !nome.contains(" ")) throw new RegraException(400, "Informe o nome completo (nome e sobrenome).");
+        if (nome.length() > 80) throw new RegraException(400, "O nome deve ter no máximo 80 caracteres.");
+
+        String cpf = BaseSintetica.digitos(limpo(d.cpf()));
+        if (cpf.length() != 11) throw new RegraException(400, "O CPF deve ter 11 dígitos.");
+        if (BaseSintetica.cpfComDigitoValido(cpf)) {
+            throw new RegraException(400, "Nesta demonstração, use um CPF fictício: com dígito verificador inválido (por exemplo, 123.456.789-00).");
+        }
+        if (contas.pacientePorCpf(cpf).isPresent()) throw new RegraException(409, "Já existe um cadastro com esse CPF.");
+
+        LocalDate nascimento = dataDoCadastro(d.nascimento(), "Data de nascimento inválida.");
+        if (nascimento.isAfter(hoje) || nascimento.isBefore(LocalDate.of(1900, 1, 1))) {
+            throw new RegraException(400, "Data de nascimento fora do intervalo aceito.");
+        }
+
+        String email = limpo(d.email()).toLowerCase(Locale.ROOT);
+        if (email.length() > 80 || !EMAIL_FICTICIO.matcher(email).matches()) {
+            throw new RegraException(400, "Nesta demonstração, use um e-mail fictício terminado em .test (por exemplo, voce@exemplo.test).");
+        }
+        if (contas.porEmail(email).isPresent()) throw new RegraException(409, "Já existe uma conta com esse e-mail.");
+
+        String senha = d.senha() == null ? "" : d.senha();
+        if (senha.length() < 4 || senha.length() > 64) throw new RegraException(400, "A senha deve ter de 4 a 64 caracteres.");
+
+        if (!BaseSintetica.CONVENIOS.contains(d.convenio())) throw new RegraException(400, "Escolha um dos convênios fictícios.");
+        String numero = limpo(d.numeroCarteirinha()).toUpperCase(Locale.ROOT);
+        if (numero.length() < 3 || numero.length() > 30) {
+            throw new RegraException(400, "O número da carteirinha deve ter de 3 a 30 caracteres.");
+        }
+        LocalDate validade = dataDoCadastro(d.validadeCarteirinha(), "Validade da carteirinha inválida.");
+        if (validade.isBefore(hoje.minusYears(10)) || validade.isAfter(hoje.plusYears(20))) {
+            throw new RegraException(400, "Validade da carteirinha fora do intervalo aceito.");
+        }
+        if (!BaseSintetica.SERVICOS.contains(d.servico())) throw new RegraException(400, "Escolha o que você vai agendar.");
+
+        if (contas.criadasNoPortal() >= LIMITE_CONTAS_NOVAS) {
+            throw new RegraException(409, "Limite de contas novas desta demonstração atingido. Zere a demo para criar outras.");
+        }
+        String cpfFormatado = cpf.substring(0, 3) + "." + cpf.substring(3, 6) + "." + cpf.substring(6, 9) + "-" + cpf.substring(9);
+        var paciente = contas.novoPaciente(nome, cpfFormatado, nascimento, d.convenio(), numero, validade, d.servico());
+        return contas.criar(email, senha, paciente, kits.kitDoCadastro(paciente).id());
+    }
+
+    /** Texto digitado sem caracteres de controle e com espaços normalizados. */
+    private static String limpo(String s) {
+        return s == null ? "" : s.replaceAll("\\p{Cntrl}", "").replaceAll("\\s+", " ").trim();
+    }
+
+    private static LocalDate dataDoCadastro(String s, String erro) {
+        try {
+            return LocalDate.parse(limpo(s));
+        } catch (DateTimeParseException e) {
+            throw new RegraException(400, erro);
+        }
     }
 
     public ContasSinteticas.Conta conta(String contaId) {
@@ -494,6 +567,8 @@ public final class CheckInServico {
     public synchronized void reiniciar() {
         checkIns.clear();
         contas.reiniciarAgenda();
+        contas.reiniciarCadastros(); // contas criadas no portal, os cadastros e os documentos gerados para elas
+        kits.reiniciarCadastros();
         senhasFluxo = 0;
         senhasApoio = 0;
     }

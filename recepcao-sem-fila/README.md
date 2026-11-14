@@ -81,6 +81,14 @@ Variações prontas: "Marina" (carteirinha vencida), "João Pedro" (guia não au
 Documento de outra pessoa numa conta (por exemplo, o SVG da Ana enviado na conta do Carlos) é encaminhado:
 a conferência é feita contra o cadastro do titular da conta, não contra o do CPF lido.
 
+**Criar conta.** Na tela de login, "Criar conta" abre um cadastro simulado: nome, CPF, nascimento, e-mail,
+senha, convênio fictício, número e validade da carteirinha e o serviço a agendar. Só aceita dados fictícios: CPF
+com dígito verificador inválido (ex.: 123.456.789-00) e e-mail terminado em `.test`. A conta entra logada, sem
+horário, e ganha documentos fictícios de exemplo gerados com os dados cadastrados. Ela não tem guia do convênio,
+então a conferência aponta "Não há guia para a visita marcada" e o caso vai para o atendimento remoto, onde uma
+pessoa resolve. A conta fica só na memória (a senha só como hash), não aparece na lista de contas da demo e é
+apagada em "Zerar a demo".
+
 ## Como medimos
 
 O painel calcula as medidas só com os check-ins da execução atual. Nada é fixo no código.
@@ -129,6 +137,8 @@ Regras que valem em todo o fluxo:
   confirma a chegada ao hospital, como a senha do fluxo normal.
 - Cada conferência registra a fonte (OCR simulado, conta do paciente, base cadastral sintética, agenda, base de guias).
 - Com conta, o documento precisa ser do titular (mesmo CPF); sem CPF legível ou com CPF de outra pessoa, vai para uma pessoa.
+- O cadastro de conta nova só aceita dados fictícios (CPF com dígito verificador inválido, e-mail `.test`,
+  convênios fictícios) e não cria guia: a falta da guia vai para uma pessoa, como qualquer dado ausente.
 - A leitura de cada documento só mostra ao paciente o que foi lido do arquivo que ele mesmo enviou; não confere
   nada nem muda o estado. A conferência acontece quando os dois documentos são enviados juntos.
 - O paciente não recebe o valor que está no cadastro quando há divergência, nem os dados da guia antes de
@@ -146,7 +156,9 @@ troque a instância em `App.java`. Antes de depender do serviço, confirme acess
 | Método e rota | O que faz |
 |---|---|
 | `GET /api/kits` | lista os kits fictícios; `GET /api/kits/{id}/identidade.svg` e `/carteirinha.svg` |
-| `GET /api/contas` | contas fictícias da demo (e-mail, nome, cenário) |
+| `GET /api/contas` | contas fictícias da demo (e-mail, nome, cenário); as criadas no portal não aparecem |
+| `POST /api/contas` | corpo `{nome, cpf, nascimento, email, senha, convenio, numeroCarteirinha, validadeCarteirinha, servico}` (datas AAAA-MM-DD); cadastro simulado, só com dados fictícios; devolve o resumo da conta nova |
+| `GET /api/contas/opcoes` | convênios fictícios e serviços aceitos no cadastro |
 | `POST /api/contas/entrar` | corpo `{email, senha}`; login simulado, devolve o resumo da conta |
 | `GET /api/contas/{id}` | resumo da conta: serviço do pedido, visita marcada (ou `null`) e a agenda de 7 dias com os horários (livres, ocupados, o atual); sem o local |
 | `POST /api/contas/{id}/agendamento` | corpo `{dia: AAAA-MM-DD, horario}`; marca ou troca o dia e o horário da visita por um livre |
@@ -164,7 +176,7 @@ troque a instância em `App.java`. Antes de depender do serviço, confirme acess
 | `POST /api/atendimento/casos/{id}/encaminhar-presencial` | corpo `{atendente, observacao}` |
 | `POST /api/atendimento/casos/{id}/concluir-presencial` | corpo `{atendente, observacao}` |
 | `GET /api/metricas` | medidas da execução |
-| `POST /api/demo/reiniciar` | apaga check-ins e medidas |
+| `POST /api/demo/reiniciar` | apaga check-ins, medidas, horários marcados e contas criadas no portal |
 
 Erros voltam como `{"erro": "..."}` com status 400, 401, 404, 409 ou 413.
 

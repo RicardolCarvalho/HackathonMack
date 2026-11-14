@@ -28,6 +28,9 @@ let ultimaTela = null;
 let ajudaNaTela = false;   // a tela atual já mostra "Falar com uma pessoa" junto das opções (sem o botão flutuante)
 let noInicio = false;      // com um check-in aberto, o paciente voltou ao início da conta (por exemplo, para trocar o horário)
 let recado = null;         // aviso de uma tela só (por exemplo, apoio cancelado)
+let cadastrando = false;   // na tela de login, o paciente abriu o cadastro de conta nova
+let rascunho = {};         // o que já foi digitado no cadastro (sobrevive a cada redesenho da tela)
+let opcoesCadastro = { convenios: [], servicos: [] };
 
 const tela = document.getElementById('tela');
 const dialogoAjuda = document.getElementById('dialogo-ajuda');
@@ -62,8 +65,34 @@ const entrar = (email, senha) => executar(async () => {
   avisoAgenda = null;
 });
 
+// ----- Cadastro (simulado): conta nova com dados fictícios -----
+
+function abrirCadastro() {
+  cadastrando = true;
+  erro = null;
+  desenhar();
+}
+
+function fecharCadastro() {
+  cadastrando = false;
+  erro = null;
+  desenhar();
+}
+
+const criarConta = () => executar(async () => {
+  conta = await api('POST', '/api/contas', rascunho);
+  cadastrando = false;
+  rascunho = {};
+  checkIn = null;
+  noInicio = false;
+  docs = vazios();
+  limparAgenda();
+  avisoAgenda = 'Conta criada. Agora escolha o dia e o horário da sua visita.';
+});
+
 function sair() {
   conta = null;
+  cadastrando = false;
   checkIn = null;
   noInicio = false;
   docs = vazios();
@@ -278,7 +307,7 @@ function desenhar() {
   let partes;
   ajudaNaTela = false;
 
-  if (!conta) partes = telaLogin();
+  if (!conta) partes = cadastrando ? telaCadastro() : telaLogin();
   else if (!checkIn || noInicio) partes = telaInicioConta();
   else if (status === 'AGUARDANDO_DOCUMENTOS') partes = telaDocumentos();
   else if (status === 'AGUARDANDO_CONFIRMACAO_GUIA') partes = telaGuia();
@@ -296,7 +325,7 @@ function desenhar() {
   document.getElementById('abrir-ajuda').hidden = !checkIn || noInicio || ajudaNaTela || status === 'CONCLUIDO' || status === 'APOIO_PRESENCIAL';
 
   // Mudou de tela (não só de detalhe): volta ao topo, como numa navegação.
-  const chave = [conta && conta.id, status, noInicio, checkIn && checkIn.reenvio.feitos, checkIn && checkIn.senha].join('|');
+  const chave = [conta && conta.id, cadastrando, status, noInicio, checkIn && checkIn.reenvio.feitos, checkIn && checkIn.senha].join('|');
   if (chave !== ultimaTela) {
     ultimaTela = chave;
     window.scrollTo({ top: 0 });
@@ -382,6 +411,8 @@ function telaLogin() {
           el('label', { for: 'senha' }, 'Senha'),
           el('input', { type: 'password', id: 'senha', autocomplete: 'current-password', required: true })),
         el('button', { class: 'primario largo', type: 'submit', disabled: ocupado }, 'Entrar', icone('seta'))),
+      el('div', { class: 'ou' }, 'Ainda não tem conta?'),
+      el('button', { class: 'secundario largo', type: 'button', onclick: abrirCadastro, disabled: ocupado }, icone('pessoa'), 'Criar conta'),
       nota('Login simulado: nesta demonstração não há autenticação real.')),
     contasDemo.length ? el('section', { class: 'cartao discreto' },
       el('div', { class: 'cartao-topo' },
@@ -394,6 +425,46 @@ function telaLogin() {
           el('span', { class: 'conta-texto' }, el('strong', {}, c.nome), el('span', { class: 'suave pequeno' }, c.cenario)),
           el('span', { class: 'chip ' + (c.esperado === 'CONCLUIR' ? 'ok' : 'atencao') },
             c.esperado === 'CONCLUIR' ? 'Tudo certo' : 'Com pendência'))))) : null,
+  ];
+}
+
+function telaCadastro() {
+  definirCabecalho('Criar sua conta', 'Seus dados, os do convênio e o que você vai agendar. Depois é só escolher o dia e o horário.',
+    { rotulo: 'Voltar ao login', acao: fecharCadastro });
+  const campo = (id, rotulo, atributos, dica) => el('div', { class: 'campo' },
+    el('label', { for: 'cad-' + id }, rotulo),
+    el('input', Object.assign({ id: 'cad-' + id, type: 'text', value: rascunho[id] || '', required: true,
+      oninput: (ev) => { rascunho[id] = ev.target.value; } }, atributos)),
+    dica ? el('span', { class: 'dica' }, dica) : null);
+  const escolha = (id, rotulo, opcoes) => el('div', { class: 'campo' },
+    el('label', { for: 'cad-' + id }, rotulo),
+    el('select', { id: 'cad-' + id, required: true, onchange: (ev) => { rascunho[id] = ev.target.value; } },
+      el('option', { value: '', disabled: true, selected: !rascunho[id] }, 'Escolha…'),
+      opcoes.map((o) => el('option', { value: o, selected: rascunho[id] === o }, o))));
+  const enviar = (ev) => { ev.preventDefault(); criarConta(); };
+
+  return [
+    el('section', { class: 'cartao' },
+      aviso('Demonstração: use só dados fictícios. O CPF precisa ter dígito verificador inválido (por exemplo, 123.456.789-00) e o e-mail precisa terminar em .test.', 'info', 'escudo'),
+      el('form', { class: 'formulario cadastro', onsubmit: enviar },
+        el('h3', {}, 'Seus dados'),
+        campo('nome', 'Nome completo', { autocomplete: 'off', maxlength: 80 }),
+        el('div', { class: 'campos-lado' },
+          campo('cpf', 'CPF', { inputmode: 'numeric', autocomplete: 'off', placeholder: '123.456.789-00', maxlength: 14 }),
+          campo('nascimento', 'Data de nascimento', { type: 'date' })),
+        el('h3', {}, 'Acesso'),
+        el('div', { class: 'campos-lado' },
+          campo('email', 'E-mail', { type: 'email', autocomplete: 'off', placeholder: 'voce@exemplo.test', maxlength: 80 }),
+          campo('senha', 'Senha', { type: 'password', autocomplete: 'new-password', minlength: 4, maxlength: 64 }, 'De 4 a 64 caracteres.')),
+        el('h3', {}, 'Convênio'),
+        escolha('convenio', 'Convênio', opcoesCadastro.convenios),
+        el('div', { class: 'campos-lado' },
+          campo('numeroCarteirinha', 'Número da carteirinha', { autocomplete: 'off', placeholder: 'HOR-0000-2026', maxlength: 30 }),
+          campo('validadeCarteirinha', 'Validade da carteirinha', { type: 'date' })),
+        el('h3', {}, 'O que você vai agendar'),
+        escolha('servico', 'Serviço', opcoesCadastro.servicos),
+        el('button', { class: 'primario largo', type: 'submit', disabled: ocupado }, 'Criar conta e entrar', icone('seta'))),
+      nota('O cadastro fica só na memória desta demonstração e é apagado ao zerar a demo. A conta nova ainda não tem guia do convênio: na conferência, uma pessoa do atendimento cuida disso.', 'escudo')),
   ];
 }
 
@@ -418,6 +489,7 @@ function cartaoAgendar() {
     el('div', { class: 'cartao-topo' },
       tituloComIcone('calendario', 'Agende sua visita', conta.servico),
       el('span', { class: 'chip info' }, 'A agendar')),
+    avisoAgenda ? aviso(avisoAgenda, 'ok', 'check') : null,
     seletorAgenda(null),
     nota('O local do atendimento aparece depois do check-in, junto com a sua senha.', 'local'));
 }
@@ -846,8 +918,10 @@ function lerGuardado(chave) {
 
 (async function abrir() {
   try {
-    const [listaContas, listaKits] = await Promise.all([api('GET', '/api/contas'), api('GET', '/api/kits')]);
+    const [listaContas, listaKits, opcoes] = await Promise.all(
+      [api('GET', '/api/contas'), api('GET', '/api/kits'), api('GET', '/api/contas/opcoes')]);
     contasDemo = listaContas;
+    opcoesCadastro = opcoes;
     kitsPorId = Object.fromEntries(listaKits.map((k) => [k.id, k]));
     const contaId = lerGuardado(CHAVE_CONTA);
     if (contaId) conta = await api('GET', `/api/contas/${contaId}`).catch(() => null);

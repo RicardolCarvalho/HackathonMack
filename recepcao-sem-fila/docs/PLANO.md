@@ -33,7 +33,11 @@ depois; um check-in em aberto passa a usar a nova visita, desde que a guia e a c
 válidas no novo dia. O local do atendimento só aparece depois da conferência, e a chegada só é aceita no dia
 da visita.
 
-Estados de interface do paciente: login (simulado), início da conta sem visita (agenda: dia e horário), visita marcada (com opção de trocar), envio de documentos com a leitura de cada um, guia para confirmar, pronto para a chegada (botão de chegada só no dia da visita),
+Cadastro: na tela de login, o paciente pode criar uma conta (simulada, em memória) com dados fictícios: CPF com
+dígito verificador inválido e e-mail `.test`. A conta nova recebe um pedido do serviço escolhido, sem guia; na
+conferência, a guia ausente vai para uma pessoa. "Zerar a demo" apaga as contas criadas.
+
+Estados de interface do paciente: login (simulado), cadastro de conta nova, início da conta sem visita (agenda: dia e horário), visita marcada (com opção de trocar), envio de documentos com a leitura de cada um, guia para confirmar, pronto para a chegada (botão de chegada só no dia da visita),
 senha emitida, aguardando atendimento remoto, apoio presencial marcado (aguardando a chegada), senha de apoio presencial,
 erro de comunicação.
 Estados do painel: fila vazia, caso aguardando ação, caso concluído, erro ao registrar sem nome ou observação.

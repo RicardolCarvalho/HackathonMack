@@ -54,6 +54,7 @@ public final class VerificaCenarios {
         teste("Apoio presencial fica marcado para o horário da visita, não para a hora do pedido", VerificaCenarios::apoioNoHorarioDaVisita);
         teste("Voltar: paciente desiste do apoio antes de chegar e volta para onde estava", VerificaCenarios::voltarDoApoio);
         teste("Limites: campos de atendimento e motivo são recusados", VerificaCenarios::limitesDosCampos);
+        teste("Cadastro: conta nova só com dados fictícios, sem guia vai para uma pessoa e some ao zerar", VerificaCenarios::cadastroNoPortal);
         teste("JSON: escrita e leitura", VerificaCenarios::json);
         teste("CPFs da base sintética têm dígito verificador inválido", VerificaCenarios::cpfsFicticios);
 
@@ -518,6 +519,69 @@ public final class VerificaCenarios {
 
         CheckIn ajuda = servico.iniciar();
         recusa(400, () -> servico.pedirAjuda(ajuda.id, "A".repeat(201)));
+    }
+
+    private static void cadastroNoPortal() {
+        LocalDate hoje = LocalDate.now();
+        CheckInServico.NovoCadastro ok = new CheckInServico.NovoCadastro("  Lia   Teste Ficticia ", "123.456.789-00",
+                "1990-05-10", "Lia@Exemplo.test", "segredo", "Plano Horizonte (fictício)", "hor-9999-2027",
+                hoje.plusYears(1).toString(), "Exame laboratorial");
+
+        // Só dados fictícios e completos.
+        recusa(400, () -> servico.cadastrar(com(ok, "cpf", "123.456.789-09")));            // dígito válido: poderia ser real
+        recusa(409, () -> servico.cadastrar(com(ok, "cpf", "111.222.333-00")));            // CPF da Ana
+        recusa(400, () -> servico.cadastrar(com(ok, "cpf", "123")));
+        recusa(400, () -> servico.cadastrar(com(ok, "email", "lia@gmail.com")));           // e-mail que pode ser real
+        recusa(409, () -> servico.cadastrar(com(ok, "email", "ana.beatriz@exemplo.test")));
+        recusa(400, () -> servico.cadastrar(com(ok, "nome", "Lia")));
+        recusa(400, () -> servico.cadastrar(com(ok, "senha", "123")));
+        recusa(400, () -> servico.cadastrar(com(ok, "nascimento", hoje.plusDays(1).toString())));
+        recusa(400, () -> servico.cadastrar(com(ok, "convenio", "Convênio de verdade")));
+        recusa(400, () -> servico.cadastrar(com(ok, "servico", "Cirurgia")));
+        recusa(400, () -> servico.cadastrar(com(ok, "validadeCarteirinha", "amanhã")));
+
+        ContasSinteticas.Conta lia = servico.cadastrar(ok);
+        igual("lia@exemplo.test", lia.email());
+        igual("Lia Teste Ficticia", lia.paciente().nome());
+        igual("123.456.789-00", lia.paciente().cpf());
+        igual("HOR-9999-2027", lia.paciente().numeroCarteirinha());
+        verdade(!lia.demo());
+        igual(lia.id(), servico.entrar("lia@exemplo.test", "segredo").id());
+        recusa(401, () -> servico.entrar("lia@exemplo.test", ContasSinteticas.SENHA_DEMO));
+        recusa(409, () -> servico.cadastrar(com(ok, "cpf", "123.456.789-01")));            // e-mail já usado
+
+        // Começa como as outras contas: sem visita e sem o local.
+        Map<String, Object> resumo = servico.resumoConta(lia.id());
+        igual(null, resumo.get("visita"));
+        igual("Exame laboratorial", resumo.get("servico"));
+        verdade(!Json.texto(resumo).contains("Coleta"));
+
+        // Com os documentos gerados do próprio cadastro tudo confere, menos a guia, que não existe: vai para uma pessoa.
+        servico.agendar(lia.id(), hoje.plusDays(1).toString(), primeiroLivre(horariosDoDia(resumo, 1)));
+        KitsFicticios.Kit kit = kits.kit(lia.kitId());
+        CheckIn c = servico.enviarDocumentos(servico.iniciar(lia.id()).id, kit.id(), kits.svgIdentidade(kit), kits.svgCarteirinha(kit));
+        igual(StatusCheckIn.ATENDIMENTO_REMOTO, c.status);
+        for (String codigo : List.of("NOME", "NASCIMENTO", "CARTEIRINHA", "AGENDAMENTO")) {
+            igual(ResultadoVerificacao.OK, verificacao(c, codigo).resultado());
+        }
+        igual(ResultadoVerificacao.AUSENTE, verificacao(c, "GUIA").resultado());
+        igual(null, c.decisaoCorreta()); // sem gabarito: não entra na avaliação das decisões
+
+        // Zerar a demo apaga a conta, o cadastro e os documentos gerados.
+        servico.reiniciar();
+        recusa(401, () -> servico.entrar("lia@exemplo.test", "segredo"));
+        recusa(404, () -> servico.resumoConta(lia.id()));
+        igual(null, kits.kit(kit.id()));
+        verdade(servico.cadastrar(ok) != null); // CPF e e-mail livres de novo
+    }
+
+    private static CheckInServico.NovoCadastro com(CheckInServico.NovoCadastro d, String campo, String v) {
+        return new CheckInServico.NovoCadastro(
+                campo.equals("nome") ? v : d.nome(), campo.equals("cpf") ? v : d.cpf(),
+                campo.equals("nascimento") ? v : d.nascimento(), campo.equals("email") ? v : d.email(),
+                campo.equals("senha") ? v : d.senha(), campo.equals("convenio") ? v : d.convenio(),
+                campo.equals("numeroCarteirinha") ? v : d.numeroCarteirinha(),
+                campo.equals("validadeCarteirinha") ? v : d.validadeCarteirinha(), campo.equals("servico") ? v : d.servico());
     }
 
     // ---------- Apoio ----------

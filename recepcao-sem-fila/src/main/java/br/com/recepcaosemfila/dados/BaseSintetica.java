@@ -40,6 +40,19 @@ public final class BaseSintetica {
     /** Quantos dias a agenda abre para o paciente escolher: hoje e os 6 seguintes. */
     public static final int DIAS_DA_AGENDA = 7;
 
+    /** Convênios fictícios da base; um cadastro novo escolhe um deles. */
+    public static final List<String> CONVENIOS = List.of("Convênio Aurora (fictício)", "Plano Horizonte (fictício)");
+
+    /** Serviços que um cadastro novo pode agendar, com o local de cada um (mostrado só depois do check-in). */
+    public static final List<String> SERVICOS = List.of("Consulta eletiva", "Exame laboratorial", "Exame de imagem");
+    private static final Map<String, String> LOCAL_DO_SERVICO = Map.of(
+            "Consulta eletiva", "Triagem, sala 2",
+            "Exame laboratorial", "Coleta, guichê 4",
+            "Exame de imagem", "Imagem, recepção B");
+
+    private final Set<String> cadastradosNoPortal = new HashSet<>();
+    private int proximoCadastro = 6;
+
     /**
      * O que o paciente tem para agendar: o pedido que gerou a guia. O local (próxima etapa) só aparece para o
      * paciente depois do check-in. O id é o do agendamento que a guia cita, criado quando o paciente escolhe o horário.
@@ -144,6 +157,46 @@ public final class BaseSintetica {
     /** Apaga os horários marcados (usado ao zerar a demo): todos voltam a não ter visita marcada. */
     public void reiniciarAgenda() {
         agendamentosPorPaciente.clear();
+    }
+
+    /**
+     * Cadastro feito pelo próprio paciente no portal (simulado, só em memória). Entra com um pedido do serviço
+     * escolhido e sem guia: a guia vem do convênio, e a conferência aponta a falta para uma pessoa resolver.
+     * Quem chama valida os dados antes.
+     */
+    public Paciente cadastrar(String nome, String cpf, LocalDate nascimento, String convenio,
+                              String numeroCarteirinha, LocalDate validadeCarteirinha, String servico) {
+        int n = proximoCadastro++;
+        Paciente p = new Paciente("P" + n, nome, cpf, nascimento, convenio, numeroCarteirinha, validadeCarteirinha);
+        paciente(p);
+        pedidosPorPaciente.put(p.id(), new Pedido("A" + n, servico, LOCAL_DO_SERVICO.get(servico)));
+        cadastradosNoPortal.add(p.id());
+        return p;
+    }
+
+    /** Apaga os cadastros feitos no portal (usado ao zerar a demo). */
+    public void reiniciarCadastros() {
+        pacientesPorCpf.values().removeIf(p -> cadastradosNoPortal.contains(p.id()));
+        for (String id : cadastradosNoPortal) {
+            pedidosPorPaciente.remove(id);
+            agendamentosPorPaciente.remove(id);
+        }
+        cadastradosNoPortal.clear();
+    }
+
+    /**
+     * CPF com dígitos verificadores válidos, como um CPF real. A base só aceita CPF fictício (dígito inválido),
+     * para um cadastro da demo nunca coincidir com o de uma pessoa.
+     */
+    public static boolean cpfComDigitoValido(String cpf) {
+        String d = digitos(cpf == null ? "" : cpf);
+        if (d.length() != 11) return false;
+        for (int j = 9; j <= 10; j++) {
+            int soma = 0;
+            for (int i = 0; i < j; i++) soma += (d.charAt(i) - '0') * (j + 1 - i);
+            if ((soma * 10) % 11 % 10 != d.charAt(j) - '0') return false;
+        }
+        return true;
     }
 
     public Iterable<Paciente> pacientes() { return pacientesPorCpf.values(); }

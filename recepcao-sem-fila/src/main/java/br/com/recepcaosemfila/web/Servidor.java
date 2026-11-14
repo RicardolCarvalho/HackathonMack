@@ -1,5 +1,6 @@
 package br.com.recepcaosemfila.web;
 
+import br.com.recepcaosemfila.dados.BaseSintetica;
 import br.com.recepcaosemfila.dados.ContasSinteticas;
 import br.com.recepcaosemfila.dados.KitsFicticios;
 import br.com.recepcaosemfila.dominio.CheckIn;
@@ -92,6 +93,7 @@ public final class Servidor {
         if (get && p.length == 2 && p[1].equals("contas")) {
             List<Map<String, Object>> l = new ArrayList<>();
             for (ContasSinteticas.Conta c : contas.todas()) {
+                if (!c.demo()) continue; // só as contas do roteiro da demo aparecem na tela de login
                 KitsFicticios.Kit kit = kits.kit(c.kitId());
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("email", c.email());
@@ -101,6 +103,19 @@ public final class Servidor {
                 l.add(m);
             }
             json(ex, 200, l);
+            return;
+        }
+        if (post && p.length == 2 && p[1].equals("contas")) {
+            Map<String, Object> corpo = corpo(ex);
+            ContasSinteticas.Conta c = servico.cadastrar(new CheckInServico.NovoCadastro(
+                    texto(corpo, "nome"), texto(corpo, "cpf"), texto(corpo, "nascimento"), texto(corpo, "email"),
+                    texto(corpo, "senha"), texto(corpo, "convenio"), texto(corpo, "numeroCarteirinha"),
+                    texto(corpo, "validadeCarteirinha"), texto(corpo, "servico")));
+            json(ex, 201, servico.resumoConta(c.id()));
+            return;
+        }
+        if (get && p.length == 3 && p[1].equals("contas") && p[2].equals("opcoes")) {
+            json(ex, 200, Map.of("convenios", BaseSintetica.CONVENIOS, "servicos", BaseSintetica.SERVICOS));
             return;
         }
         if (post && p.length == 3 && p[1].equals("contas") && p[2].equals("entrar")) {
