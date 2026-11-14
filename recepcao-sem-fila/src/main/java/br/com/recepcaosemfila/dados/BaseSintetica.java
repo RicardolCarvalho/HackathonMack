@@ -29,11 +29,11 @@ public final class BaseSintetica {
     private final Map<String, Agendamento> agendamentosPorPaciente = new LinkedHashMap<>(); // começa vazio
     private final Map<String, Guia> guiasPorAgendamento = new LinkedHashMap<>();
 
-    /** Grade da unidade fictícia: de 07:00 às 19:30, a cada 30 minutos. */
+    /** Grade da unidade fictícia, que funciona 24 horas: de 00:00 às 23:30, a cada 30 minutos. */
     public static final List<String> GRADE;
     static {
         List<String> g = new ArrayList<>();
-        for (LocalTime t = LocalTime.of(7, 0); !t.isAfter(LocalTime.of(19, 30)); t = t.plusMinutes(30)) g.add(t.toString());
+        for (int i = 0; i < 48; i++) g.add(LocalTime.MIDNIGHT.plusMinutes(30L * i).toString());
         GRADE = List.copyOf(g);
     }
 

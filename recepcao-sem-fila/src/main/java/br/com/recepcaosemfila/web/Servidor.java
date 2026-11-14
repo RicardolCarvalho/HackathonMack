@@ -155,7 +155,6 @@ public final class Servidor {
                     case "documentos" -> servico.enviarDocumentos(id, texto(corpo, "kitId"),
                             texto(corpo, "identidadeSvg"), texto(corpo, "carteirinhaSvg"));
                     case "reenvio" -> servico.reenviar(id, texto(corpo, "identidadeSvg"), texto(corpo, "carteirinhaSvg"));
-                    case "confirmar-guia" -> servico.confirmarGuia(id);
                     case "chegada" -> servico.registrarChegada(id);
                     case "ajuda" -> servico.pedirAjuda(id, texto(corpo, "motivo"));
                     case "cancelar-ajuda" -> servico.cancelarAjuda(id);
