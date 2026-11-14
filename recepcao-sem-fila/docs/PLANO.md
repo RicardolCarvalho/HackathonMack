@@ -6,7 +6,7 @@ Complementa o brief da equipe. Onde não há evidência, está marcado como hip�
 
 | | |
 |---|---|
-| **Entrada** | Paciente com visita não emergencial agendada abre o site e envia documento de identidade e carteirinha (fictícios). |
+| **Entrada** | Paciente com visita não emergencial agendada entra na conta do portal (login simulado) e envia documento de identidade e carteirinha (fictícios). A cada arquivo, o assistente mostra o que foi lido para o paciente conferir. |
 | **Decisão** | O sistema lê os documentos e confere, por regra fixa: leitura completa, cadastro pelo CPF, nome, nascimento, carteirinha (número, convênio, validade), agendamento do dia e guia (autorizada, válida, da mesma carteirinha). |
 | **Ação** | Tudo confere: o paciente confirma a guia e, ao chegar, confirma a chegada. |
 | **Saída** | Passagem registrada, senha emitida e próxima etapa indicada. Tempo e desfecho entram nas medidas. |
@@ -20,9 +20,15 @@ AGUARDANDO_DOCUMENTOS ─ok→ AGUARDANDO_CONFIRMACAO_GUIA → PRONTO_PARA_CHEGA
         └────────→ ATENDIMENTO_REMOTO ─────────────────────────┘
                           │ encaminhado
    pedido de ajuda ──→ APOIO_PRESENCIAL ──→ CONCLUIDO (registrado por uma pessoa)
+
+ATENDIMENTO_REMOTO ─(pendência de documento: paciente reenvia e a nova conferência passa)→ AGUARDANDO_CONFIRMACAO_GUIA
+                   (até 2 reenvios; se ainda falhar, continua com a pessoa)
 ```
 
-Estados de interface do paciente: início, envio de documentos, guia para confirmar, pronto para a chegada,
+Antes do check-in, o paciente logado pode trocar o horário da visita de hoje por um horário livre da agenda
+sintética do mesmo serviço. Um check-in em aberto passa a usar o novo horário.
+
+Estados de interface do paciente: login (simulado), início da conta com a visita de hoje, envio de documentos com a leitura de cada um, guia para confirmar, pronto para a chegada,
 senha emitida, aguardando atendimento remoto, senha de apoio presencial, erro de comunicação.
 Estados do painel: fila vazia, caso aguardando ação, caso concluído, erro ao registrar sem nome ou observação.
 

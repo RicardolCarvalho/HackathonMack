@@ -1,11 +1,13 @@
 package br.com.recepcaosemfila.servico;
 
 import br.com.recepcaosemfila.dados.BaseSintetica;
+import br.com.recepcaosemfila.dados.ContasSinteticas;
 import br.com.recepcaosemfila.dominio.Agendamento;
 import br.com.recepcaosemfila.dominio.DocumentoLido;
 import br.com.recepcaosemfila.dominio.Guia;
 import br.com.recepcaosemfila.dominio.Paciente;
 import br.com.recepcaosemfila.dominio.ResultadoVerificacao;
+import br.com.recepcaosemfila.dominio.TipoDocumento;
 import br.com.recepcaosemfila.dominio.Verificacao;
 
 import java.time.LocalDate;
@@ -43,6 +45,14 @@ public final class Conferencia {
     public Conferencia(BaseSintetica base) { this.base = base; }
 
     public Resultado conferir(DocumentoLido identidade, DocumentoLido carteirinha, LocalDate hoje) {
+        return conferir(identidade, carteirinha, hoje, null);
+    }
+
+    /**
+     * Com conta (titular != null), o cadastro de referência é o do titular, não o do CPF lido: assim quem está logado
+     * não consegue conferir o documento de outra pessoa e receber a guia dela.
+     */
+    public Resultado conferir(DocumentoLido identidade, DocumentoLido carteirinha, LocalDate hoje, Paciente titular) {
         List<Verificacao> vs = new ArrayList<>();
 
         // 1. Leitura dos documentos
@@ -53,8 +63,10 @@ public final class Conferencia {
 
         // 2. Cadastro
         String cpf = identidade.campo(LeitorDocumento.CPF);
-        Paciente p = base.pacientePorCpf(cpf).orElse(null);
-        if (cpf == null) {
+        Paciente p = titular != null ? titular : base.pacientePorCpf(cpf).orElse(null);
+        if (titular != null) {
+            vs.add(titular(cpf, titular));
+        } else if (cpf == null) {
             vs.add(naoAvaliado("CADASTRO_LOCALIZADO", "Cadastro do paciente", BaseSintetica.FONTE_CADASTRO,
                     "Sem CPF legível não é possível localizar o cadastro."));
         } else if (p == null) {
@@ -102,6 +114,43 @@ public final class Conferencia {
             vs.add(guia(guia, p, hoje));
         }
         return new Resultado(vs, p, ag, guia);
+    }
+
+    /**
+     * Avisos que dá para dar só com o documento, sem olhar o cadastro (por exemplo, carteirinha vencida).
+     * Servem para o paciente trocar o arquivo antes de enviar; não aprovam nem reprovam nada.
+     */
+    public static List<Alerta> alertasDaLeitura(DocumentoLido doc, LocalDate hoje) {
+        List<Alerta> alertas = new ArrayList<>();
+        if (doc.tipo() == TipoDocumento.CARTEIRINHA) {
+            String lida = doc.campo(LeitorDocumento.VALIDADE);
+            LocalDate validade = data(lida);
+            if (lida != null && validade == null) {
+                alertas.add(new Alerta(LeitorDocumento.VALIDADE, "Não entendi a data de validade (" + lida + ")."));
+            } else if (validade != null && validade.isBefore(hoje)) {
+                alertas.add(new Alerta(LeitorDocumento.VALIDADE, "Esta carteirinha venceu em " + validade.format(BR)
+                        + ". Se você tem a carteirinha renovada, envie ela no lugar."));
+            }
+        }
+        return alertas;
+    }
+
+    /** Aviso sobre um campo lido (por exemplo, a validade vencida). */
+    public record Alerta(String campo, String texto) {}
+
+    private static Verificacao titular(String cpfLido, Paciente titular) {
+        String codigo = "TITULAR_CONTA";
+        String titulo = "Documento do titular da conta";
+        String fonte = ContasSinteticas.FONTE + " + " + BaseSintetica.FONTE_CADASTRO;
+        if (cpfLido == null) {
+            return new Verificacao(codigo, titulo, AUSENTE, null, titular.cpf(), fonte,
+                    "Sem CPF legível não é possível confirmar que o documento é do titular da conta.");
+        }
+        if (!BaseSintetica.digitos(cpfLido).equals(BaseSintetica.digitos(titular.cpf()))) {
+            return new Verificacao(codigo, titulo, DIVERGENTE, cpfLido, titular.cpf(), fonte,
+                    "O CPF do documento não é o do titular da conta.");
+        }
+        return new Verificacao(codigo, titulo, OK, cpfLido, titular.cpf(), fonte, "O CPF do documento é o do titular da conta.");
     }
 
     private static Verificacao leitura(String codigo, String titulo, DocumentoLido doc) {

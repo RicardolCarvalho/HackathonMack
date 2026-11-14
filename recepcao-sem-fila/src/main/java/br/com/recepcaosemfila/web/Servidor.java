@@ -1,8 +1,13 @@
 package br.com.recepcaosemfila.web;
 
+import br.com.recepcaosemfila.dados.ContasSinteticas;
 import br.com.recepcaosemfila.dados.KitsFicticios;
 import br.com.recepcaosemfila.dominio.CheckIn;
+import br.com.recepcaosemfila.dominio.DocumentoLido;
+import br.com.recepcaosemfila.dominio.TipoDocumento;
 import br.com.recepcaosemfila.servico.CheckInServico;
+import br.com.recepcaosemfila.servico.Conferencia;
+import br.com.recepcaosemfila.servico.LeitorDocumento;
 import br.com.recepcaosemfila.servico.RegraException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -26,11 +31,13 @@ public final class Servidor {
 
     private final CheckInServico servico;
     private final KitsFicticios kits;
+    private final ContasSinteticas contas;
     private HttpServer http;
 
-    public Servidor(CheckInServico servico, KitsFicticios kits) {
+    public Servidor(CheckInServico servico, KitsFicticios kits, ContasSinteticas contas) {
         this.servico = servico;
         this.kits = kits;
+        this.contas = contas;
     }
 
     public void iniciar(int porta) throws IOException {
@@ -81,19 +88,57 @@ public final class Servidor {
             if (p[3].equals("carteirinha.svg")) { responder(ex, 200, "image/svg+xml", bytes(kits.svgCarteirinha(kit))); return; }
         }
 
+        // Conta do paciente (login simulado)
+        if (get && p.length == 2 && p[1].equals("contas")) {
+            List<Map<String, Object>> l = new ArrayList<>();
+            for (ContasSinteticas.Conta c : contas.todas()) {
+                KitsFicticios.Kit kit = kits.kit(c.kitId());
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("email", c.email());
+                m.put("nome", c.paciente().nome());
+                m.put("cenario", kit == null ? null : kit.resumo());
+                m.put("esperado", kit == null ? null : kit.esperado());
+                l.add(m);
+            }
+            json(ex, 200, l);
+            return;
+        }
+        if (post && p.length == 3 && p[1].equals("contas") && p[2].equals("entrar")) {
+            Map<String, Object> corpo = corpo(ex);
+            ContasSinteticas.Conta c = servico.entrar(texto(corpo, "email"), texto(corpo, "senha"));
+            json(ex, 200, servico.resumoConta(c.id()));
+            return;
+        }
+        if (get && p.length == 3 && p[1].equals("contas")) {
+            json(ex, 200, servico.resumoConta(p[2]));
+            return;
+        }
+        if (post && p.length == 4 && p[1].equals("contas") && p[3].equals("horario")) {
+            json(ex, 200, servico.remarcar(p[2], texto(corpo(ex), "horario")));
+            return;
+        }
+
         // Jornada do paciente
         if (post && p.length == 2 && p[1].equals("checkins")) {
-            json(ex, 201, servico.iniciar().paraMapa(false));
+            Map<String, Object> corpo = corpo(ex);
+            json(ex, 201, servico.iniciar(texto(corpo, "contaId")).paraMapa(false));
             return;
         }
         if (p.length >= 3 && p[1].equals("checkins")) {
             String id = p[2];
             if (get && p.length == 3) { json(ex, 200, servico.buscar(id).paraMapa(false)); return; }
+            if (post && p.length == 4 && p[3].equals("leitura")) {
+                Map<String, Object> corpo = corpo(ex);
+                TipoDocumento tipo = TipoDocumento.valueOf(String.valueOf(corpo.get("tipo")));
+                json(ex, 200, leitura(servico.lerDocumento(id, tipo, texto(corpo, "svg"))));
+                return;
+            }
             if (post && p.length == 4) {
                 Map<String, Object> corpo = corpo(ex);
                 CheckIn c = switch (p[3]) {
                     case "documentos" -> servico.enviarDocumentos(id, texto(corpo, "kitId"),
                             texto(corpo, "identidadeSvg"), texto(corpo, "carteirinhaSvg"));
+                    case "reenvio" -> servico.reenviar(id, texto(corpo, "identidadeSvg"), texto(corpo, "carteirinhaSvg"));
                     case "confirmar-guia" -> servico.confirmarGuia(id);
                     case "chegada" -> servico.registrarChegada(id);
                     case "ajuda" -> servico.pedirAjuda(id, texto(corpo, "motivo"));
@@ -137,6 +182,28 @@ public final class Servidor {
         }
 
         throw new RegraException(404, "Rota não encontrada: " + metodo + " " + caminho);
+    }
+
+    /** O que o leitor extraiu de um documento, campo a campo, na ordem em que o paciente confere. */
+    private static Map<String, Object> leitura(CheckInServico.Leitura l) {
+        DocumentoLido d = l.documento();
+        List<Map<String, Object>> campos = new ArrayList<>();
+        for (String campo : LeitorDocumento.obrigatorios(d.tipo())) {
+            Map<String, Object> c = new LinkedHashMap<>();
+            c.put("campo", campo);
+            c.put("rotulo", LeitorDocumento.rotulo(campo));
+            c.put("valor", d.campo(campo));
+            c.put("alerta", l.alertas().stream().filter(a -> a.campo().equals(campo)).map(Conferencia.Alerta::texto)
+                    .findFirst().orElse(null));
+            campos.add(c);
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("tipo", d.tipo());
+        m.put("campos", campos);
+        m.put("completo", d.ausentes().isEmpty());
+        m.put("alertas", l.alertas().stream().map(Conferencia.Alerta::texto).toList());
+        m.put("fonte", d.fonte());
+        return m;
     }
 
     // ---------- Arquivos das telas ----------

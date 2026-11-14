@@ -3,15 +3,23 @@ package br.com.recepcaosemfila.dominio;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /** Estado de um check-in. Só o CheckInServico altera estes campos. */
 public class CheckIn {
+    /** Quantas vezes o paciente pode reenviar documento num caso com pendência antes de ficar só com o atendimento. */
+    public static final int LIMITE_REENVIOS = 2;
+
     public final String id;
     public final Instant criadoEm;
     public StatusCheckIn status = StatusCheckIn.AGUARDANDO_DOCUMENTOS;
+
+    public String contaId;             // conta do portal que iniciou o check-in (login simulado), se houver
+    public String contaEmail;
+    public Paciente titular;           // titular da conta: o cadastro contra o qual o documento é conferido
 
     public String kitId;               // kit fictício usado (se houver)
     public String esperado;            // gabarito do kit: CONCLUIR ou ESCALAR
@@ -28,6 +36,11 @@ public class CheckIn {
     public List<Verificacao> verificacoes = new ArrayList<>();
     public final List<String> motivos = new ArrayList<>();
     public final List<Evento> eventos = new ArrayList<>();
+
+    public DocumentoLido identidadeLida;     // últimas leituras conferidas (não vão para a API)
+    public DocumentoLido carteirinhaLida;
+    public int reenvios;
+    public boolean corrigidoPeloPaciente;  // uma pendência de documento foi resolvida com reenvio do próprio paciente
 
     public boolean ajudaPedidaPeloPaciente;
     public String atendidoPor;
@@ -55,6 +68,19 @@ public class CheckIn {
         return concluiu == "CONCLUIR".equals(esperado);
     }
 
+    /** Documentos cuja pendência o próprio paciente pode resolver reenviando; vazio quando não cabe reenvio. */
+    public List<TipoDocumento> documentosParaReenviar() {
+        if (status != StatusCheckIn.ATENDIMENTO_REMOTO || reenvios >= LIMITE_REENVIOS) return List.of();
+        List<TipoDocumento> l = new ArrayList<>();
+        for (Verificacao v : verificacoes) {
+            if (!v.falhou()) continue;
+            TipoDocumento t = TipoDocumento.daVerificacao(v.codigo());
+            if (t != null && !l.contains(t)) l.add(t);
+        }
+        l.sort(Comparator.naturalOrder());
+        return l;
+    }
+
     public Map<String, Object> paraMapa(boolean visaoAtendente) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", id);
@@ -70,6 +96,13 @@ public class CheckIn {
         m.put("nomeLido", nomeLido);
         m.put("cpfLido", mascararCpf(cpfLido));
 
+        Map<String, Object> reenvio = new LinkedHashMap<>();
+        reenvio.put("documentos", documentosParaReenviar());
+        reenvio.put("feitos", reenvios);
+        reenvio.put("limite", LIMITE_REENVIOS);
+        reenvio.put("corrigido", corrigidoPeloPaciente);
+        m.put("reenvio", reenvio);
+
         List<Map<String, Object>> vs = new ArrayList<>();
         for (Verificacao v : verificacoes) vs.add(v.paraMapa(visaoAtendente));
         m.put("verificacoes", vs);
@@ -84,6 +117,7 @@ public class CheckIn {
             m.put("guia", guia == null ? null : mapaGuia());
         }
         if (visaoAtendente) {
+            m.put("conta", contaEmail);
             m.put("kitId", kitId);
             m.put("esperado", esperado);
             m.put("decisaoCorreta", decisaoCorreta());

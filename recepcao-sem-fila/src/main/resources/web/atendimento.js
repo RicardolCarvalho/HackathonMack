@@ -54,6 +54,7 @@ function desenharMedidas(m) {
     [m.concluidosAutomaticamente, 'Concluídos sem intervenção'],
     [m.escaladosRemoto, 'Encaminhados ao atendimento remoto'],
     [m.apoioPresencialAPedido, 'Pedidos de apoio presencial'],
+    [m.corrigidosPeloPaciente, 'Pendências resolvidas pelo paciente com reenvio'],
     [segundos(m.tempoMedioAteDesfechoSeg), 'Tempo médio até o desfecho'],
     [decisoes, 'Decisões do sistema iguais ao gabarito'],
   ];

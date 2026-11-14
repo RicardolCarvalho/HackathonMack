@@ -10,6 +10,16 @@
         "$env:Path = 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.21.9-hotspot\\bin;' + $env:Path; & .\\recepcao-sem-fila\\executar.bat 8080"
       ],
       "port": 8080
+    },
+    {
+      "name": "recepcao-sem-fila-teste-8081",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:Path = 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.21.9-hotspot\\bin;' + $env:Path; Set-Location recepcao-sem-fila; $o = Join-Path $env:TEMP 'recepcao-sem-fila-8081'; if (Test-Path $o) { Remove-Item -Recurse -Force $o }; New-Item -ItemType Directory $o | Out-Null; $f = Get-ChildItem -Recurse src\\main\\java -Filter *.java | ForEach-Object { $_.FullName }; javac -encoding UTF-8 -d $o $f; Copy-Item -Recurse src\\main\\resources\\* $o; java -cp $o br.com.recepcaosemfila.App 8081"
+      ],
+      "port": 8081
     }
   ]
 }
