@@ -1,6 +1,7 @@
 package br.com.recepcaosemfila;
 
 import br.com.recepcaosemfila.dados.BaseSintetica;
+import br.com.recepcaosemfila.dados.ContasSinteticas;
 import br.com.recepcaosemfila.dados.KitsFicticios;
 import br.com.recepcaosemfila.servico.CheckInServico;
 import br.com.recepcaosemfila.servico.Conferencia;
@@ -26,9 +27,10 @@ public final class App {
         BaseSintetica base = new BaseSintetica(hoje);
         KitsFicticios kits = new KitsFicticios(hoje);
         LeitorDocumento leitor = new LeitorSvgSimulado(); // ponto de troca para um OCR real
-        CheckInServico servico = new CheckInServico(relogio, leitor, new Conferencia(base), kits);
+        ContasSinteticas contas = new ContasSinteticas(base); // login simulado do portal do paciente
+        CheckInServico servico = new CheckInServico(relogio, leitor, new Conferencia(base), kits, contas);
 
-        new Servidor(servico, kits).iniciar(porta);
+        new Servidor(servico, kits, contas).iniciar(porta);
         System.out.println("Recepcao Sem Fila no ar (dados 100% sinteticos).");
         System.out.println("  Paciente:    http://localhost:" + porta + "/");
         System.out.println("  Atendimento: http://localhost:" + porta + "/atendimento");
