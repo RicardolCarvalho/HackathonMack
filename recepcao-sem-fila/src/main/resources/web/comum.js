@@ -66,7 +66,7 @@ async function api(metodo, caminho, corpo) {
 }
 
 function segundos(valor) {
-  if (valor === null || valor === undefined) return 'sem dado';
+  if (valor === null || valor === undefined) return 'Sem dado';
   if (valor < 60) return valor.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' s';
   const min = Math.floor(valor / 60);
   return min + ' min ' + Math.round(valor - min * 60) + ' s';
