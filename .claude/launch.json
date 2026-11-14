@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "recepcao-sem-fila",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:Path = 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.21.9-hotspot\\bin;' + $env:Path; & .\\recepcao-sem-fila\\executar.bat 8080"
+      ],
+      "port": 8080
+    }
+  ]
+}

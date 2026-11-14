@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel de atendimento | Recepção Sem Fila</title>
+  <link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+  <header class="topo">
+    <strong>Recepção Sem Fila: painel de atendimento</strong>
+    <a href="/" target="_blank" rel="noopener">Abrir tela do paciente</a>
+  </header>
+  <div class="aviso-sintetico">Demonstração com dados sintéticos. Decisões sobre exceções são sempre de uma pessoa.</div>
+
+  <main class="painel">
+    <section aria-labelledby="titulo-medidas">
+      <h2 id="titulo-medidas">Medidas desta execução</h2>
+      <p class="suave pequeno" id="como-ler"></p>
+      <div class="medidas" id="medidas" style="margin-top:12px"></div>
+    </section>
+
+    <section aria-labelledby="titulo-casos">
+      <div class="acoes" style="justify-content:space-between;align-items:center">
+        <h2 id="titulo-casos">Check-ins</h2>
+        <button class="secundario" id="reiniciar">Zerar a demo</button>
+      </div>
+      <div class="abas" id="abas" style="margin-top:12px"></div>
+      <div id="casos" style="margin-top:16px"></div>
+    </section>
+  </main>
+
+  <dialog id="dialogo-acao" aria-labelledby="titulo-acao">
+    <h2 id="titulo-acao"></h2>
+    <p id="texto-acao" class="suave"></p>
+    <div class="campo">
+      <label for="atendente">Seu nome</label>
+      <input type="text" id="atendente" maxlength="60" autocomplete="off">
+    </div>
+    <div class="campo">
+      <label for="observacao">O que foi feito (fica no histórico do caso)</label>
+      <textarea id="observacao" maxlength="400"></textarea>
+    </div>
+    <p class="erro" id="erro-acao" hidden></p>
+    <div class="acoes">
+      <button id="confirmar-acao">Registrar</button>
+      <button class="secundario" id="cancelar-acao">Cancelar</button>
+    </div>
+  </dialog>
+
+  <script src="/comum.js"></script>
+  <script src="/atendimento.js"></script>
+</body>
+</html>

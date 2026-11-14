@@ -12,6 +12,7 @@
 
 # Package Files #
 *.jar
+!recepcao-sem-fila/dist/*.jar
 *.war
 *.nar
 *.ear

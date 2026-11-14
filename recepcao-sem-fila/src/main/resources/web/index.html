@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Check-in | Recepção Sem Fila</title>
+  <link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+  <header class="topo">
+    <strong>Recepção Sem Fila</strong>
+    <a href="/atendimento" target="_blank" rel="noopener">Abrir painel de atendimento</a>
+  </header>
+  <div class="aviso-sintetico">Demonstração com dados sintéticos. Não envie documentos reais.</div>
+
+  <main class="paciente">
+    <ol class="trilha" id="trilha" aria-label="Etapas do check-in"></ol>
+    <div id="tela" aria-live="polite"></div>
+  </main>
+
+  <div class="ajuda-fixa" id="barra-ajuda" hidden>
+    <button class="secundario" id="abrir-ajuda">Falar com uma pessoa</button>
+  </div>
+
+  <dialog id="dialogo-ajuda" aria-labelledby="titulo-ajuda">
+    <h2 id="titulo-ajuda">Falar com uma pessoa</h2>
+    <p>Você recebe uma senha de apoio e alguém da recepção atende você no balcão. Seu check-in fica guardado, sem perder o que já foi feito.</p>
+    <div class="campo">
+      <label for="motivo-ajuda">O que aconteceu? (opcional)</label>
+      <textarea id="motivo-ajuda" maxlength="200"></textarea>
+    </div>
+    <div class="acoes">
+      <button id="confirmar-ajuda">Pedir apoio presencial</button>
+      <button class="secundario" id="cancelar-ajuda">Voltar ao check-in</button>
+    </div>
+  </dialog>
+
+  <script src="/comum.js"></script>
+  <script src="/paciente.js"></script>
+</body>
+</html>
