@@ -67,12 +67,10 @@ public final class VerificaCenarios {
 
     private static void sucesso() {
         CheckIn c = enviar("ana");
-        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, c.status);
+        // A guia é do hospital com o convênio: com tudo conferido, o paciente não confirma nada e só falta chegar.
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, c.status);
         verdade(c.verificacoes.stream().noneMatch(Verificacao::falhou));
         igual(ResultadoVerificacao.SIMULADO, verificacao(c, "IDENTIDADE_SIMULADA").resultado());
-
-        servico.confirmarGuia(c.id);
-        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, c.status);
         igual(Desfecho.CONCLUIDO_AUTOMATICO, c.desfechoInicial);
 
         servico.registrarChegada(c.id);
@@ -172,7 +170,6 @@ public final class VerificaCenarios {
 
     private static void transicoesInvalidas() {
         CheckIn c = servico.iniciar();
-        recusa(409, () -> servico.confirmarGuia(c.id));
         recusa(409, () -> servico.registrarChegada(c.id));
         recusa(409, () -> servico.resolverRemoto(c.id, "Bia", "x"));
         recusa(404, () -> servico.buscar("nao-existe"));
@@ -186,8 +183,7 @@ public final class VerificaCenarios {
         igual(null, vazio.get("proporcaoDecisoesCorretas"));
         igual(null, vazio.get("tempoMedioAteDesfechoSeg"));
 
-        CheckIn a = enviar("ana");
-        servico.confirmarGuia(a.id);
+        enviar("ana");
         enviar("carlos");
         enviar("tereza");
         CheckIn ajuda = servico.iniciar();
@@ -249,7 +245,7 @@ public final class VerificaCenarios {
     private static void contaTitular() {
         ContasSinteticas.Conta ana = servico.entrar("ana.beatriz@exemplo.test", ContasSinteticas.SENHA_DEMO);
         CheckIn proprio = enviar(servico.iniciar(ana.id()), "ana");
-        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, proprio.status);
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, proprio.status);
         igual(ResultadoVerificacao.OK, verificacao(proprio, "TITULAR_CONTA").resultado());
         verdade(proprio.verificacoes.stream().noneMatch(v -> v.codigo().equals("CADASTRO_LOCALIZADO")));
 
@@ -315,9 +311,8 @@ public final class VerificaCenarios {
         // Check-in antecipado de uma visita de amanhã: a conferência vale; a chegada só no dia da visita.
         CheckIn c = s.iniciar(ana.id());
         s.enviarDocumentos(c.id, "ana", k.svgIdentidade(k.kit("ana")), k.svgCarteirinha(k.kit("ana")));
-        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, c.status);
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, c.status);
         igual(hoje.plusDays(1), c.agendamento.data());
-        s.confirmarGuia(c.id);
         recusa(409, () -> s.registrarChegada(c.id));
 
         // Depois da conferência, trocar para um dia em que a guia já venceu é recusado; dentro da validade, vale.
@@ -358,14 +353,13 @@ public final class VerificaCenarios {
         KitsFicticios.Kit renovada = kits.kit(kits.kit("marina").correcaoId());
         verdade(servico.lerDocumento(c.id, TipoDocumento.CARTEIRINHA, kits.svgCarteirinha(renovada)).alertas().isEmpty());
         servico.reenviar(c.id, null, kits.svgCarteirinha(renovada));
-        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, c.status);
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, c.status);
         verdade(c.corrigidoPeloPaciente && c.motivos.isEmpty());
         igual(1, c.reenvios);
         igual(Desfecho.ESCALADO_REMOTO, c.desfechoInicial); // o primeiro desfecho não muda
         igual(Boolean.TRUE, c.decisaoCorreta());
         verdade(c.eventos.stream().anyMatch(e -> e.descricao().contains("saiu do atendimento remoto")));
 
-        servico.confirmarGuia(c.id);
         servico.registrarChegada(c.id);
         igual(StatusCheckIn.CONCLUIDO, c.status);
         igual(1, servico.metricas().get("corrigidosPeloPaciente"));
@@ -393,7 +387,7 @@ public final class VerificaCenarios {
         // Ilegível: o documento legível resolve.
         CheckIn tereza = enviar("tereza");
         servico.reenviar(tereza.id, kits.svgIdentidade(kits.kit("tereza-legivel")), null);
-        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, tereza.status);
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, tereza.status);
     }
 
     private static void apoioNoHorarioDaVisita() {
@@ -424,6 +418,11 @@ public final class VerificaCenarios {
         s.enviarDocumentos(d.id, "carlos", k.svgIdentidade(k.kit("carlos")), k.svgCarteirinha(k.kit("carlos")));
         s.encaminharPresencial(d.id, "Bia", "Conferir o documento original no balcão.");
         igual("11:00", d.horarioApoio);
+        // Depois de confirmar a chegada, a visita não muda pelo portal: só com a recepção.
+        s.registrarChegada(d.id);
+        String amanha = primeiroLivre(horariosDoDia(s.resumoConta(carlos.id()), 1));
+        recusa(409, () -> s.agendar(carlos.id(), hoje.plusDays(1).toString(), amanha));
+        igual(hoje, d.diaApoio);
 
         // Visita que já passou: o apoio é assim que o paciente chegar.
         BaseSintetica base2 = new BaseSintetica(hoje);
@@ -436,15 +435,20 @@ public final class VerificaCenarios {
     }
 
     private static void voltarDoApoio() {
-        // Pediu ajuda na guia e voltou: segue o fluxo normal, e o pedido desfeito não conta como desfecho.
+        // Pediu ajuda antes de enviar e voltou: o pedido desfeito não conta como desfecho.
+        CheckIn lia = servico.iniciar();
+        servico.pedirAjuda(lia.id, "dúvida");
+        servico.cancelarAjuda(lia.id);
+        igual(StatusCheckIn.AGUARDANDO_DOCUMENTOS, lia.status);
+        igual(null, lia.desfechoInicial);
+
+        // Pediu ajuda já pronto para a chegada e voltou: segue o fluxo normal, com o desfecho da conferência.
         CheckIn ana = enviar("ana");
-        servico.pedirAjuda(ana.id, "dúvida na guia");
+        servico.pedirAjuda(ana.id, "dúvida");
         servico.cancelarAjuda(ana.id);
-        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, ana.status);
-        igual(null, ana.desfechoInicial);
+        igual(StatusCheckIn.PRONTO_PARA_CHEGADA, ana.status);
         verdade(!ana.ajudaPedidaPeloPaciente && ana.horarioApoio == null && ana.motivos.isEmpty());
         verdade(ana.eventos.stream().anyMatch(e -> e.descricao().contains("Desistiu do apoio")));
-        servico.confirmarGuia(ana.id);
         igual(Desfecho.CONCLUIDO_AUTOMATICO, ana.desfechoInicial);
 
         // Com pendência: volta para o atendimento remoto, com o mesmo motivo e o mesmo desfecho.

@@ -462,10 +462,6 @@ details.detalhe-conferencia[open] summary { margin-bottom: 8px; }
   padding: 22px 24px;
   text-align: center;
   position: relative;
-  -webkit-mask: radial-gradient(circle 13px at 0 62%, transparent 98%, #000) left / 51% 100% no-repeat,
-                radial-gradient(circle 13px at 100% 62%, transparent 98%, #000) right / 51% 100% no-repeat;
-          mask: radial-gradient(circle 13px at 0 62%, transparent 98%, #000) left / 51% 100% no-repeat,
-                radial-gradient(circle 13px at 100% 62%, transparent 98%, #000) right / 51% 100% no-repeat;
 }
 .bilhete .rotulo-senha { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .bilhete .numero {
@@ -474,7 +470,6 @@ details.detalhe-conferencia[open] summary { margin-bottom: 8px; }
   letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
   margin: 8px 0 4px;
 }
-.bilhete .destino { border-top: 2px dashed rgba(16, 42, 53, 0.35); margin-top: 16px; padding-top: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
 
 .rodape { text-align: center; font-size: 0.8rem; color: var(--tinta-fraca); margin-top: 28px; }
 .rodape a { color: var(--tinta-suave); }
@@ -541,7 +536,6 @@ dialog > * + * { margin-top: 14px; }
 .caso.ATENDIMENTO_REMOTO { border-left: 5px solid var(--pendencia); }
 .caso.APOIO_PRESENCIAL { border-left: 5px solid var(--marca); }
 .caso.AGUARDANDO_DOCUMENTOS { border-left: 5px solid var(--tinta-suave); }
-.caso.AGUARDANDO_CONFIRMACAO_GUIA { border-left: 5px solid var(--marca); }
 .caso.PRONTO_PARA_CHEGADA { border-left: 5px solid var(--livre); }
 .caso.CONCLUIDO { border-left: 5px solid var(--livre); }
 .caso summary {

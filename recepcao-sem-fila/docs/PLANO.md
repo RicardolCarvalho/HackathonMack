@@ -8,14 +8,14 @@ Complementa o brief da equipe. Onde não há evidência, está marcado como hip�
 |---|---|
 | **Entrada** | Paciente com um pedido não emergencial (consulta ou exame) entra na conta do portal (login simulado), escolhe o dia e o horário da visita e envia documento de identidade e carteirinha (fictícios). A cada arquivo, o assistente mostra o que foi lido para o paciente conferir. |
 | **Decisão** | O sistema lê os documentos e confere, por regra fixa: leitura completa, cadastro pelo CPF, nome, nascimento, carteirinha (número, convênio, validade até o dia da visita), visita marcada e guia (autorizada, válida até o dia da visita, da mesma carteirinha). |
-| **Ação** | Tudo confere: o paciente confirma a guia e, ao chegar, confirma a chegada. |
-| **Saída** | Passagem registrada, senha emitida e próxima etapa indicada. Tempo e desfecho entram nas medidas. |
+| **Ação** | Tudo confere: o pré-check-in fica pronto e, ao chegar, o paciente confirma a chegada. A guia é emitida pelo hospital e enviada ao convênio; o paciente não a confirma, só a vê para consulta. |
+| **Saída** | Passagem registrada e senha emitida. Tempo e desfecho entram nas medidas. |
 | **Exceção** | Qualquer divergência ou dado ausente: atendimento remoto, com motivo, valor lido, valor da base e fonte. O atendente libera ou encaminha ao apoio presencial. O paciente pode pedir uma pessoa a qualquer momento (o botão fica junto das opções quando um documento dá problema). O apoio no balcão é marcado para o dia e o horário da visita, não para a hora do pedido. |
 
 ## Estados
 
 ```
-AGUARDANDO_DOCUMENTOS ─ok→ AGUARDANDO_CONFIRMACAO_GUIA → PRONTO_PARA_CHEGADA → CONCLUIDO
+AGUARDANDO_DOCUMENTOS ─ok→ PRONTO_PARA_CHEGADA → CONCLUIDO
         │ falha                                                  ↑ liberado por uma pessoa
         └────────→ ATENDIMENTO_REMOTO ─────────────────────────┘
                           │ encaminhado
@@ -23,23 +23,24 @@ AGUARDANDO_DOCUMENTOS ─ok→ AGUARDANDO_CONFIRMACAO_GUIA → PRONTO_PARA_CHEGA
                             │ paciente volta antes de chegar (só se foi ele quem pediu)
                             └──→ estado em que estava antes do pedido
 
-ATENDIMENTO_REMOTO ─(pendência de documento: paciente reenvia e a nova conferência passa)→ AGUARDANDO_CONFIRMACAO_GUIA
+ATENDIMENTO_REMOTO ─(pendência de documento: paciente reenvia e a nova conferência passa)→ PRONTO_PARA_CHEGADA
                    (até 2 reenvios; se ainda falhar, continua com a pessoa)
 ```
 
 Agenda: o paciente entra sem visita marcada e escolhe o dia (hoje e os próximos 6) e um horário livre da agenda
 sintética do serviço do pedido. O check-in só começa com a visita marcada. Ele pode trocar o dia ou o horário
 depois; um check-in em aberto passa a usar a nova visita, desde que a guia e a carteirinha conferidas continuem
-válidas no novo dia. O local do atendimento só aparece depois da conferência, e a chegada só é aceita no dia
+válidas no novo dia. O portal não mostra o local do atendimento (sala, guichê), e a chegada só é aceita no dia
 da visita.
 
 Cadastro: na tela de login, o paciente pode criar uma conta (simulada, em memória) com dados fictícios: CPF com
 dígito verificador inválido e e-mail `.test`. A conta nova recebe um pedido do serviço escolhido, sem guia; na
 conferência, a guia ausente vai para uma pessoa. "Zerar a demo" apaga as contas criadas.
 
-Estados de interface do paciente: login (simulado), cadastro de conta nova, início da conta sem visita (agenda: dia e horário), visita marcada (com opção de trocar), envio de documentos com a leitura de cada um, guia para confirmar, pronto para a chegada (botão de chegada só no dia da visita),
+Estados de interface do paciente: login (simulado), cadastro de conta nova, início da conta sem visita (agenda: dia e horário), visita marcada (com opção de trocar), envio de documentos com a leitura de cada um, conferência (com a guia, só para consulta), pronto para a chegada (botão de chegada só no dia da visita),
 senha emitida, aguardando atendimento remoto, apoio presencial marcado (aguardando a chegada), senha de apoio presencial,
-erro de comunicação.
+erro de comunicação. Toda tela, menos o login, tem "Voltar" para a página anterior; as etapas já feitas
+aparecem só para consulta, com "Avançar".
 Estados do painel: fila vazia, caso aguardando ação, caso concluído, erro ao registrar sem nome ou observação.
 
 ## Contratos de dados

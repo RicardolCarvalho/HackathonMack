@@ -121,7 +121,6 @@ function quando(iso, horario, hoje) {
 
 const ROTULO_STATUS = {
   AGUARDANDO_DOCUMENTOS: 'Aguardando documentos',
-  AGUARDANDO_CONFIRMACAO_GUIA: 'Aguardando confirmação da guia',
   PRONTO_PARA_CHEGADA: 'Pronto para a chegada',
   ATENDIMENTO_REMOTO: 'Atendimento remoto',
   APOIO_PRESENCIAL: 'Apoio presencial',

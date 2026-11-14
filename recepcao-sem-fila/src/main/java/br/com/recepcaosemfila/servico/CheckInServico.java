@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-import static br.com.recepcaosemfila.dominio.StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA;
 import static br.com.recepcaosemfila.dominio.StatusCheckIn.AGUARDANDO_DOCUMENTOS;
 import static br.com.recepcaosemfila.dominio.StatusCheckIn.APOIO_PRESENCIAL;
 import static br.com.recepcaosemfila.dominio.StatusCheckIn.ATENDIMENTO_REMOTO;
@@ -35,7 +34,7 @@ import static br.com.recepcaosemfila.dominio.StatusCheckIn.PRONTO_PARA_CHEGADA;
 /**
  * Máquina de estados do check-in:
  *
- *   AGUARDANDO_DOCUMENTOS -> (conferência ok)    AGUARDANDO_CONFIRMACAO_GUIA -> PRONTO_PARA_CHEGADA -> CONCLUIDO
+ *   AGUARDANDO_DOCUMENTOS -> (conferência ok)    PRONTO_PARA_CHEGADA -> CONCLUIDO
  *                         -> (alguma falha)      ATENDIMENTO_REMOTO -> PRONTO_PARA_CHEGADA (liberado por uma pessoa)
  *                                                                   -> APOIO_PRESENCIAL
  *   qualquer estado aberto -> (paciente pede ajuda) APOIO_PRESENCIAL -> CONCLUIDO (registrado por uma pessoa)
@@ -243,12 +242,18 @@ public final class CheckInServico {
     private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     /**
-     * Um check-in que já passou pela conferência foi validado para o dia da visita de então. Trocar para um dia em
-     * que a guia ou a carteirinha já venceram não é aceito: o paciente escolhe outro dia ou fala com uma pessoa.
+     * Quando o paciente pode trocar a visita com um check-in aberto. Depois de confirmar a chegada (senha emitida),
+     * não pode: quem muda é a recepção. Um check-in que já passou pela conferência foi validado para o dia da visita
+     * de então; trocar para um dia em que a guia ou a carteirinha já venceram não é aceito: o paciente escolhe outro
+     * dia ou fala com uma pessoa.
      */
     private void exigirValidadeAte(ContasSinteticas.Conta conta, LocalDate dia) {
         for (CheckIn c : checkIns.values()) {
-            if (!conta.id().equals(c.contaId) || c.status == CONCLUIDO || c.agendamento == null) continue;
+            if (!conta.id().equals(c.contaId) || c.status == CONCLUIDO) continue;
+            if (c.senha != null) {
+                throw new RegraException(409, "Você já confirmou a chegada ao hospital. Para mudar a visita, fale com a recepção.");
+            }
+            if (c.agendamento == null) continue;
             LocalDate guia = c.guia == null ? null : c.guia.validade();
             LocalDate carteirinha = c.carteirinhaLida == null ? null
                     : Conferencia.data(c.carteirinhaLida.campo(LeitorDocumento.VALIDADE));
@@ -330,8 +335,10 @@ public final class CheckInServico {
 
         Conferencia.Resultado r = conferirLidos(c);
         if (r.aprovado()) {
-            c.status = AGUARDANDO_CONFIRMACAO_GUIA;
-            evento(c, "SISTEMA", "Conferência sem pendências. Aguardando o paciente confirmar a guia.");
+            // A guia é emitida pelo hospital e enviada ao convênio: o paciente não confirma nada sobre ela.
+            c.status = PRONTO_PARA_CHEGADA;
+            desfecho(c, Desfecho.CONCLUIDO_AUTOMATICO);
+            evento(c, "SISTEMA", "Conferência sem pendências (guia " + c.guia.numero() + " autorizada). Pré-check-in concluído.");
         } else {
             c.motivos.addAll(r.motivos());
             c.status = ATENDIMENTO_REMOTO;
@@ -343,7 +350,7 @@ public final class CheckInServico {
 
     /**
      * Num caso com pendência de documento, o paciente reenvia o documento atualizado ou correto (null = mantém o anterior).
-     * A conferência roda de novo, com as mesmas regras. Se nada falhar, o check-in segue para a guia; se ainda falhar,
+     * A conferência roda de novo, com as mesmas regras. Se nada falhar, o check-in fica pronto para a chegada; se ainda falhar,
      * continua com o atendimento remoto. O desfecho inicial (encaminhado) não muda, e tudo fica no histórico.
      */
     public synchronized CheckIn reenviar(String id, String svgIdentidade, String svgCarteirinha) {
@@ -380,7 +387,7 @@ public final class CheckInServico {
         Conferencia.Resultado r = conferirLidos(c);
         c.motivos.clear();
         if (r.aprovado()) {
-            c.status = AGUARDANDO_CONFIRMACAO_GUIA;
+            c.status = PRONTO_PARA_CHEGADA;
             c.corrigidoPeloPaciente = true;
             evento(c, "SISTEMA", "Nova conferência sem pendências após o reenvio. O caso saiu do atendimento remoto.");
         } else {
@@ -399,15 +406,6 @@ public final class CheckInServico {
         c.agendamento = r.agendamento();
         c.guia = r.guia();
         return r;
-    }
-
-    public synchronized CheckIn confirmarGuia(String id) {
-        CheckIn c = buscar(id);
-        exigir(c, AGUARDANDO_CONFIRMACAO_GUIA);
-        c.status = PRONTO_PARA_CHEGADA;
-        desfecho(c, Desfecho.CONCLUIDO_AUTOMATICO);
-        evento(c, "PACIENTE", "Guia " + c.guia.numero() + " confirmada. Pré-check-in concluído.");
-        return c;
     }
 
     /**

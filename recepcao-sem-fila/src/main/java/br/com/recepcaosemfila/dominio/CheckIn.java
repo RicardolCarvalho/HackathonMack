@@ -115,8 +115,7 @@ public class CheckIn {
 
         // Dados que vêm do cadastro só vão para o paciente depois que a conferência passou
         // (ou depois que uma pessoa do atendimento liberou).
-        boolean liberado = status == StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA
-                || status == StatusCheckIn.PRONTO_PARA_CHEGADA
+        boolean liberado = status == StatusCheckIn.PRONTO_PARA_CHEGADA
                 || status == StatusCheckIn.CONCLUIDO;
         if (visaoAtendente || liberado) {
             m.put("agendamento", agendamento == null ? null : mapaAgendamento());
