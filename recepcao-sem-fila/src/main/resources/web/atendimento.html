@@ -4,29 +4,40 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Painel de atendimento | Recepção Sem Fila</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/estilo.css">
 </head>
 <body>
   <header class="topo">
-    <strong>Recepção Sem Fila: painel de atendimento</strong>
-    <a href="/" target="_blank" rel="noopener">Abrir tela do paciente</a>
+    <span class="marca-nome"><span class="logo" aria-hidden="true">✓</span>Recepção Sem Fila <small>Painel de atendimento</small></span>
+    <a href="/" target="_blank" rel="noopener">Tela do paciente ↗</a>
   </header>
   <div class="aviso-sintetico">Demonstração com dados sintéticos. Decisões sobre exceções são sempre de uma pessoa.</div>
 
   <main class="painel">
     <section aria-labelledby="titulo-medidas">
-      <h2 id="titulo-medidas">Medidas desta execução</h2>
-      <p class="suave pequeno" id="como-ler"></p>
-      <div class="medidas" id="medidas" style="margin-top:12px"></div>
+      <div class="cabecalho-secao">
+        <div>
+          <div class="rotulo">Indicadores</div>
+          <h2 id="titulo-medidas">Medidas desta execução</h2>
+          <p class="suave pequeno" id="como-ler"></p>
+        </div>
+      </div>
+      <div class="medidas" id="medidas"></div>
     </section>
 
     <section aria-labelledby="titulo-casos">
-      <div class="acoes" style="justify-content:space-between;align-items:center">
-        <h2 id="titulo-casos">Check-ins</h2>
+      <div class="cabecalho-secao">
+        <div>
+          <div class="rotulo">Fila de exceções</div>
+          <h2 id="titulo-casos">Check-ins</h2>
+        </div>
         <button class="secundario" id="reiniciar">Zerar a demo</button>
       </div>
-      <div class="abas" id="abas" style="margin-top:12px"></div>
-      <div id="casos" style="margin-top:16px"></div>
+      <div class="abas" id="abas"></div>
+      <div id="casos"></div>
     </section>
   </main>
 

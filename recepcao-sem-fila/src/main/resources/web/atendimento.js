@@ -59,7 +59,7 @@ function desenharMedidas(m) {
     [decisoes, 'decisões do sistema iguais ao gabarito'],
   ];
   document.getElementById('medidas').replaceChildren(...itens.map(([valor, rotulo]) =>
-    el('div', { class: 'medida' }, el('div', { class: 'valor' }, valor), el('div', { class: 'rotulo' }, rotulo))));
+    el('div', { class: 'medida' }, el('div', { class: 'valor' }, valor), el('div', { class: 'rotulo-medida' }, rotulo))));
   document.getElementById('como-ler').textContent = m.comoLer;
 }
 

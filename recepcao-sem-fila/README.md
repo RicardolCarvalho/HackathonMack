@@ -32,8 +32,8 @@ se mudar o código e quiser um jar novo, gere com `mvn package` (sai em `target/
 
 Abra a tela do paciente e o painel lado a lado. No painel, use "Zerar a demo" antes de começar.
 
-1. **Cadastro correto.** Começar check-in → kit "Ana Beatriz" → tudo confere → Confirmar guia →
-   Confirmar chegada → senha A-001 e próxima etapa. Nenhuma pessoa da recepção foi acionada.
+1. **Cadastro correto.** Começar check-in → kit "Ana Beatriz" → tudo confere → "Sim, é esta guia" →
+   "Cheguei ao hospital" → senha A-001 e próxima etapa. Nenhuma pessoa da recepção foi acionada.
 2. **Informação divergente.** Começar check-in → kit "Carlos Eduardo" → a data de nascimento do documento
    não bate com o cadastro → o caso aparece no painel, em "Atendimento remoto", com o valor lido, o valor
    da base e a fonte de cada um → o atendente clica em "Resolver e liberar", informa nome e observação →
