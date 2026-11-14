@@ -480,7 +480,7 @@ dialog > * + * { margin-top: 14px; }
 }
 .medida { background: var(--fundo); border-radius: var(--raio-m); padding: 16px 18px; border: 1px solid var(--linha); }
 .medida .valor { font-family: var(--fonte-titulo); font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; color: var(--marca); }
-.medida .rotulo { font-size: 0.95rem; font-weight: 700; color: var(--tinta-suave); margin-top: 6px; }
+.medida .rotulo { font-family: var(--fonte); font-size: 0.95rem; font-weight: 700; letter-spacing: normal; text-transform: none; color: var(--tinta-suave); margin-top: 6px; }
 
 .abas { display: flex; gap: 8px; flex-wrap: wrap; }
 .abas button { background: var(--papel); color: var(--tinta); border-color: var(--linha); padding: 8px 14px; border-radius: 999px; }
