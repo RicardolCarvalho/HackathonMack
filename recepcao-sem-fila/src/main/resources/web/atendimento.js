@@ -51,12 +51,12 @@ function desenharMedidas(m) {
     : 'Sem dado';
   const itens = [
     [m.total, 'Check-ins iniciados'],
-    [m.concluidosAutomaticamente, 'Concluídos sem intervenção'],
-    [m.escaladosRemoto, 'Encaminhados ao atendimento remoto'],
-    [m.apoioPresencialAPedido, 'Pedidos de apoio presencial'],
-    [m.corrigidosPeloPaciente, 'Pendências resolvidas pelo paciente com reenvio'],
-    [segundos(m.tempoMedioAteDesfechoSeg), 'Tempo médio até o desfecho'],
-    [decisoes, 'Decisões do sistema iguais ao gabarito'],
+    [m.concluidosAutomaticamente, 'Sem intervenção'],
+    [m.escaladosRemoto, 'Atendimento remoto'],
+    [m.apoioPresencialAPedido, 'Apoio presencial'],
+    [m.corrigidosPeloPaciente, 'Reenvios resolvidos'],
+    [segundos(m.tempoMedioAteDesfechoSeg), 'Tempo até desfecho'],
+    [decisoes, 'Decisões corretas'],
   ];
   document.getElementById('medidas').replaceChildren(...itens.map(([valor, rotulo]) =>
     el('div', { class: 'medida' }, el('div', { class: 'valor' }, valor), el('div', { class: 'rotulo' }, rotulo))));
@@ -112,8 +112,8 @@ function cartaoCaso(c) {
       senha || balcao ? el('div', { class: 'lado-caso' }, senha, balcao) : null),
     el('div', { class: 'corpo' },
       botoes(c),
+      tabelaInformacoes(c),
       c.verificacoes.length ? tabelaVerificacoes(c) : null,
-      el('p', { class: 'pequeno suave' }, textoGabarito(c)),
       el('div', {}, el('h3', {}, 'Histórico'),
         el('ul', { class: 'historico' }, c.eventos.map((e) =>
           el('li', {}, el('span', { class: 'suave' }, new Date(e.quando).toLocaleTimeString('pt-BR')),
@@ -155,12 +155,27 @@ function tabelaVerificacoes(c) {
             el('td', {}, v.detalhe)))))));
 }
 
-function textoGabarito(c) {
-  if (!c.desfechoInicial) return 'Ainda sem desfecho.';
-  if (c.desfechoInicial === 'APOIO_PRESENCIAL_A_PEDIDO') return 'O paciente pediu ajuda antes de o sistema decidir; este caso não entra na avaliação das decisões.';
-  if (c.decisaoCorreta === null) return 'Arquivos enviados sem kit: não há gabarito para avaliar a decisão do sistema.';
-  const esperado = c.esperado === 'CONCLUIR' ? 'concluir sem intervenção' : 'encaminhar para uma pessoa';
-  return `Gabarito do kit: ${esperado}. Decisão do sistema: ${c.decisaoCorreta ? 'igual ao gabarito' : 'DIFERENTE do gabarito'}.`;
+function tabelaInformacoes(c) {
+  const linhas = [];
+  if (c.pacienteCadastro) linhas.push(['Paciente', c.pacienteCadastro]);
+  if (c.conta) linhas.push(['Conta', c.conta]);
+  if (c.agendamento) {
+    linhas.push(['Data e horário', `${dataBr(c.agendamento.data)} às ${c.agendamento.horario}`]);
+    linhas.push(['Serviço', c.agendamento.servico]);
+    linhas.push(['Próxima etapa', c.agendamento.proximaEtapa]);
+  }
+  if (c.guia) {
+    linhas.push(['Guia', c.guia.numero]);
+    linhas.push(['Procedimento', c.guia.procedimento]);
+    linhas.push(['Status da guia', c.guia.status]);
+    linhas.push(['Convênio', c.guia.convenio]);
+  }
+  if (!linhas.length) return null;
+  return el('div', { class: 'informacoes-caso' },
+    el('h3', {}, 'Informações do paciente'),
+    el('div', { class: 'rolagem' },
+      el('table', {}, el('tbody', {}, linhas.map(([rotulo, valor]) =>
+        el('tr', {}, el('th', {}, rotulo), el('td', {}, valor || '—')))))));
 }
 
 // ---------- Ações do atendente ----------

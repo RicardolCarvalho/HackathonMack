@@ -53,6 +53,7 @@ public final class VerificaCenarios {
         teste("Reenvio: só para pendência de documento e com limite", VerificaCenarios::reenvioLimites);
         teste("Apoio presencial fica marcado para o horário da visita, não para a hora do pedido", VerificaCenarios::apoioNoHorarioDaVisita);
         teste("Voltar: paciente desiste do apoio antes de chegar e volta para onde estava", VerificaCenarios::voltarDoApoio);
+        teste("Limites: campos de atendimento e motivo são recusados", VerificaCenarios::limitesDosCampos);
         teste("JSON: escrita e leitura", VerificaCenarios::json);
         teste("CPFs da base sintética têm dígito verificador inválido", VerificaCenarios::cpfsFicticios);
 
@@ -508,6 +509,15 @@ public final class VerificaCenarios {
         for (Paciente p : new BaseSintetica(LocalDate.now()).pacientes()) {
             verdade(!cpfValido(p.cpf()));
         }
+    }
+
+    private static void limitesDosCampos() {
+        CheckIn divergente = enviar("carlos");
+        recusa(400, () -> servico.resolverRemoto(divergente.id, "A".repeat(61), "observação válida"));
+        recusa(400, () -> servico.resolverRemoto(divergente.id, "Atendente", "A".repeat(401)));
+
+        CheckIn ajuda = servico.iniciar();
+        recusa(400, () -> servico.pedirAjuda(ajuda.id, "A".repeat(201)));
     }
 
     // ---------- Apoio ----------
