@@ -2,6 +2,7 @@ package br.com.recepcaosemfila.dominio;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -43,8 +44,11 @@ public class CheckIn {
     public boolean corrigidoPeloPaciente;  // uma pendência de documento foi resolvida com reenvio do próprio paciente
 
     public boolean ajudaPedidaPeloPaciente;
+    public StatusCheckIn statusAntesDaAjuda; // para onde o paciente volta se desistir do apoio antes de chegar
     public String atendidoPor;
     public String senha;
+    public LocalDate diaApoio;         // apoio presencial: dia e horário da visita marcada (null = assim que chegar)
+    public String horarioApoio;
 
     public CheckIn(String id, Instant criadoEm) {
         this.id = id;
@@ -93,6 +97,8 @@ public class CheckIn {
         m.put("ajudaPedidaPeloPaciente", ajudaPedidaPeloPaciente);
         m.put("atendidoPor", atendidoPor);
         m.put("senha", senha);
+        m.put("diaApoio", diaApoio);
+        m.put("horarioApoio", horarioApoio);
         m.put("nomeLido", nomeLido);
         m.put("cpfLido", mascararCpf(cpfLido));
 

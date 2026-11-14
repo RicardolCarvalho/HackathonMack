@@ -1,4 +1,4 @@
-/* Recepção Sem Fila: petróleo da marca, verde de liberação, âmbar de pendência e amarelo só na senha. */
+/* Recepção Sem Fila: petróleo da marca, verde de liberação, âmbar de pendência e azul só na senha. */
 :root {
   --tinta: #102a35;
   --tinta-suave: #556a73;
@@ -18,7 +18,9 @@
   --pendencia-fundo: #fff3e1;
   --erro: #c0352b;
   --erro-fundo: #fdecea;
-  --senha: #ffd23f;
+  --senha: #c7d9ff;
+  --senha-clara: #e6eeff;
+  --senha-forte: #3d6bd4;
   --raio: 20px;
   --raio-p: 12px;
   --raio-m: 16px;
@@ -135,8 +137,8 @@ textarea { min-height: 84px; resize: vertical; }
 .selo-demo {
   font-size: 0.75rem; font-weight: 600;
   padding: 4px 10px; border-radius: 999px;
-  background: rgba(255, 210, 63, 0.16); color: #ffe27a;
-  box-shadow: inset 0 0 0 1px rgba(255, 210, 63, 0.35);
+  background: rgba(167, 197, 255, 0.16); color: #d3e2ff;
+  box-shadow: inset 0 0 0 1px rgba(167, 197, 255, 0.4);
 }
 .conta-topo { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; }
 .avatar-mini {
@@ -179,7 +181,7 @@ textarea { min-height: 84px; resize: vertical; }
 .trilha li.feita::before, .trilha li.atual::before, .trilha li.parada::before { background: #7fe0c9; }
 .trilha li.feita .bolinha { background: #7fe0c9; color: #0a3541; box-shadow: none; }
 .trilha li.atual .bolinha { background: #fff; color: var(--marca); box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.18); }
-.trilha li.parada .bolinha { background: #ffb547; color: #4a2700; box-shadow: 0 0 0 5px rgba(255, 181, 71, 0.22); }
+.trilha li.parada .bolinha { background: #ff9f80; color: #4a1405; box-shadow: 0 0 0 5px rgba(255, 159, 128, 0.24); }
 
 /* ---------- Portal do paciente: conteúdo ---------- */
 .paciente { max-width: 760px; margin: -64px auto 0; padding: 0 16px 120px; position: relative; }
@@ -258,7 +260,7 @@ button.conta:hover { background: #fafcfd; border-color: var(--marca); box-shadow
   font-weight: 800; font-size: 0.9rem;
 }
 
-/* Visita de hoje e escolha de horário */
+/* Visita marcada */
 .visita { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .visita-hora {
   font-family: var(--fonte-titulo);
@@ -274,8 +276,28 @@ button.conta:hover { background: #fafcfd; border-color: var(--marca); box-shadow
 .com-icone { display: flex; align-items: center; gap: 6px; }
 .com-icone .icone { width: 16px; height: 16px; }
 
-.horarios { border-top: 1px solid var(--linha); padding-top: 16px; }
-.horarios > * + * { margin-top: 14px; }
+/* Agenda: primeiro o dia, depois o horário */
+.agenda { border-top: 1px solid var(--linha); padding-top: 16px; }
+.cartao > .agenda:first-child, .cartao-topo + .agenda { border-top: 0; padding-top: 0; }
+.agenda > * + * { margin-top: 14px; }
+.agenda h3 { margin: 0; font-size: 1rem; }
+.agenda > h3 { margin-top: 22px; }
+.chips-dia { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+button.dia {
+  flex-direction: column; gap: 2px;
+  background: var(--papel); color: var(--tinta);
+  border: 1.5px solid var(--linha-forte);
+  padding: 10px 4px; border-radius: 12px;
+  font-variant-numeric: tabular-nums;
+}
+button.dia .dia-nome { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--tinta-suave); }
+button.dia strong { font-size: 1.05rem; line-height: 1.2; }
+button.dia .dia-livres { font-size: 0.7rem; font-weight: 600; color: var(--livre-escuro); white-space: nowrap; }
+button.dia:hover { background: var(--marca-clara); border-color: var(--marca); }
+button.dia.escolhido { background: var(--marca); border-color: var(--marca); color: #fff; }
+button.dia.escolhido .dia-nome, button.dia.escolhido .dia-livres { color: #cfe3e8; }
+button.dia:disabled { background: var(--fundo); border-color: transparent; color: var(--tinta-fraca); cursor: not-allowed; opacity: 1; }
+button.dia:disabled .dia-nome, button.dia:disabled .dia-livres { color: var(--tinta-fraca); }
 .grupo-titulo { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--tinta-suave); margin-bottom: 8px; }
 .chips-horario { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
 button.horario {
@@ -285,12 +307,14 @@ button.horario {
   font-variant-numeric: tabular-nums;
 }
 button.horario:hover { background: var(--marca-clara); border-color: var(--marca); color: var(--marca); }
-button.horario.atual { background: var(--marca); border-color: var(--marca); color: #fff; }
-button.horario:disabled { background: var(--fundo); border-color: transparent; color: var(--tinta-fraca); text-decoration: line-through; opacity: 1; }
+button.horario.escolhido { background: var(--marca); border-color: var(--marca); color: #fff; }
+button.horario:disabled { background: var(--fundo); border-color: transparent; color: var(--tinta-fraca); text-decoration: line-through; cursor: not-allowed; opacity: 1; }
+button.horario.atual:disabled { background: var(--marca-clara); border: 1.5px dashed var(--marca); color: var(--marca); text-decoration: none; }
 .legenda { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; color: var(--tinta-suave); }
 .legenda span { display: inline-flex; align-items: center; gap: 6px; }
 .legenda i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; border: 1.5px solid var(--linha-forte); background: var(--papel); }
-.legenda i.atual { background: var(--marca); border-color: var(--marca); }
+.legenda i.escolhido { background: var(--marca); border-color: var(--marca); }
+.legenda i.atual { background: var(--marca-clara); border: 1.5px dashed var(--marca); }
 .legenda i.ocupado { background: var(--fundo); border-color: transparent; }
 
 .passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
@@ -309,7 +333,7 @@ button.horario:disabled { background: var(--fundo); border-color: transparent; c
   transition: border-color 0.15s, background-color 0.15s;
 }
 .zona:hover, .zona.arrastando { border-color: var(--marca); background: var(--marca-clara); }
-.zona:focus-within { outline: 3px solid var(--senha); outline-offset: 2px; }
+.zona:focus-within { outline: 3px solid var(--senha-forte); outline-offset: 2px; }
 .zona .selo-icone { width: 52px; height: 52px; border-radius: 50%; margin-bottom: 6px; }
 .zona strong { font-size: 1rem; }
 .zona input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -369,6 +393,26 @@ button.horario:disabled { background: var(--fundo); border-color: transparent; c
 .cartao.acao-final { display: grid; gap: 12px; }
 .cartao.acao-final > * + * { margin-top: 0; }
 
+/* Voltar à tela anterior: fica acima do título, na faixa de topo. */
+button.voltar {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 0; box-shadow: none;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 6px 12px 6px 6px; margin: 0 0 10px -6px;
+  font-size: 0.9rem; font-weight: 600; border-radius: 999px;
+}
+button.voltar:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+button.voltar .icone { width: 18px; height: 18px; }
+
+/* "Falar com uma pessoa" como mais uma opção da tela, não no canto. */
+.opcao-pessoa { display: grid; gap: 8px; }
+.opcao-pessoa p { text-align: center; }
+.ou {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 0.85rem; color: var(--tinta-suave);
+}
+.ou::before, .ou::after { content: ""; flex: 1; height: 1px; background: var(--linha); }
+
 /* Resultado, pendências e conferência */
 .resultado { display: flex; gap: 16px; align-items: center; }
 .resultado > div > * + * { margin-top: 4px; }
@@ -406,7 +450,7 @@ details.detalhe-conferencia[open] summary { margin-bottom: 8px; }
 
 /* Senha em formato de bilhete: o único elemento "barulhento" da tela. */
 .bilhete {
-  background: linear-gradient(160deg, #ffe066, var(--senha));
+  background: linear-gradient(160deg, var(--senha-clara), var(--senha));
   color: var(--tinta);
   border-radius: 16px;
   padding: 22px 24px;
@@ -511,6 +555,10 @@ dialog > * + * { margin-top: 14px; }
 .senha-caso { min-width: 104px; text-align: center; padding: 10px 14px; border-radius: 10px; background: var(--senha); color: var(--tinta); }
 .rotulo-senha { display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
 .senha-caso strong { display: block; font-size: 1.65rem; line-height: 1.1; margin-top: 2px; }
+.lado-caso { display: grid; gap: 8px; }
+.balcao-caso { min-width: 104px; text-align: center; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--linha); }
+.balcao-caso strong { display: block; font-size: 1.25rem; line-height: 1.15; margin-top: 2px; }
+.balcao-caso .pequeno { display: block; }
 .caso .corpo { padding: 0 20px 20px; }
 .caso .corpo > * + * { margin-top: 16px; }
 .caso summary h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 1.25rem; }
@@ -556,6 +604,7 @@ tr.falhou td { background: var(--pendencia-fundo); }
   button.conta { grid-template-columns: 40px 1fr; }
   button.conta .chip { grid-column: 2; justify-self: start; }
   .visita-hora { font-size: 2.2rem; }
+  .chips-dia { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .trilha li { font-size: 0.7rem; }
   .painel { padding: 20px 16px 48px; }
   .painel > section { padding: 18px; }

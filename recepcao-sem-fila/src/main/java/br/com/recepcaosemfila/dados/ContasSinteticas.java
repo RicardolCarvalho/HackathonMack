@@ -52,16 +52,21 @@ public final class ContasSinteticas {
 
     public List<Conta> todas() { return new ArrayList<>(porId.values()); }
 
-    public Optional<Agendamento> agendamentoDeHoje(Conta c, LocalDate hoje) {
-        return base.agendamentoDoDia(c.paciente().id(), hoje);
+    /** A visita marcada pela conta, de hoje em diante (vazio enquanto o paciente não escolhe dia e horário). */
+    public Optional<Agendamento> visita(Conta c, LocalDate hoje) {
+        return base.proximaVisita(c.paciente().id(), hoje);
     }
 
-    public List<BaseSintetica.Horario> horarios(Conta c, LocalDate hoje, LocalTime agora) {
-        return base.horarios(c.paciente().id(), hoje, agora);
+    public Optional<BaseSintetica.Pedido> pedido(Conta c) {
+        return base.pedido(c.paciente().id());
     }
 
-    public Agendamento remarcar(Conta c, LocalDate hoje, String horario) {
-        return base.remarcar(c.paciente().id(), hoje, horario);
+    public List<BaseSintetica.Horario> horarios(Conta c, LocalDate dia, LocalDate hoje, LocalTime agora) {
+        return base.horarios(c.paciente().id(), dia, hoje, agora);
+    }
+
+    public Agendamento agendar(Conta c, LocalDate dia, String horario) {
+        return base.agendar(c.paciente().id(), dia, horario);
     }
 
     public void reiniciarAgenda() { base.reiniciarAgenda(); }

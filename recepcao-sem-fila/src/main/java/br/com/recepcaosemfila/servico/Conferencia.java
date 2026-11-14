@@ -82,7 +82,7 @@ public final class Conferencia {
             vs.add(naoAvaliado("NOME", "Nome", BaseSintetica.FONTE_CADASTRO, motivo));
             vs.add(naoAvaliado("NASCIMENTO", "Data de nascimento", BaseSintetica.FONTE_CADASTRO, motivo));
             vs.add(naoAvaliado("CARTEIRINHA", "Carteirinha do convênio", BaseSintetica.FONTE_CADASTRO, motivo));
-            vs.add(naoAvaliado("AGENDAMENTO", "Agendamento de hoje", BaseSintetica.FONTE_AGENDA, motivo));
+            vs.add(naoAvaliado("AGENDAMENTO", "Agendamento da visita", BaseSintetica.FONTE_AGENDA, motivo));
             vs.add(naoAvaliado("GUIA", "Guia do convênio", BaseSintetica.FONTE_GUIAS, motivo));
             return new Resultado(vs, null, null, null);
         }
@@ -97,21 +97,25 @@ public final class Conferencia {
         vs.add(comparar("NASCIMENTO", "Data de nascimento", nasc, p.nascimento().format(BR),
                 p.nascimento().equals(data(nasc)), BaseSintetica.FONTE_CADASTRO));
 
+        // A visita marcada (de hoje em diante). Carteirinha e guia precisam valer até o dia dela.
+        Agendamento ag = base.proximaVisita(p.id(), hoje).orElse(null);
+        LocalDate diaVisita = ag != null ? ag.data() : hoje;
+
         // 4. Carteirinha
-        vs.add(carteirinha(carteirinha, p, hoje));
+        vs.add(carteirinha(carteirinha, p, hoje, diaVisita));
 
         // 5. Agendamento e guia
-        Agendamento ag = base.agendamentoDoDia(p.id(), hoje).orElse(null);
         Guia guia = null;
         if (ag == null) {
-            vs.add(new Verificacao("AGENDAMENTO", "Agendamento de hoje", AUSENTE, null, null,
-                    BaseSintetica.FONTE_AGENDA, "Não há agendamento para hoje neste cadastro."));
+            vs.add(new Verificacao("AGENDAMENTO", "Agendamento da visita", AUSENTE, null, null,
+                    BaseSintetica.FONTE_AGENDA, "Não há visita marcada para hoje ou para os próximos dias neste cadastro."));
             vs.add(naoAvaliado("GUIA", "Guia do convênio", BaseSintetica.FONTE_GUIAS, "Depende de haver agendamento."));
         } else {
-            vs.add(new Verificacao("AGENDAMENTO", "Agendamento de hoje", OK, null, ag.servico() + " às " + ag.horario(),
-                    BaseSintetica.FONTE_AGENDA, "Agendamento localizado para hoje."));
+            vs.add(new Verificacao("AGENDAMENTO", "Agendamento da visita", OK, null,
+                    ag.servico() + " em " + ag.data().format(BR) + " às " + ag.horario(),
+                    BaseSintetica.FONTE_AGENDA, "Visita marcada para " + ag.data().format(BR) + "."));
             guia = base.guiaDoAgendamento(ag.id()).orElse(null);
-            vs.add(guia(guia, p, hoje));
+            vs.add(guia(guia, p, hoje, diaVisita));
         }
         return new Resultado(vs, p, ag, guia);
     }
@@ -170,14 +174,14 @@ public final class Conferencia {
                 : new Verificacao(codigo, titulo, DIVERGENTE, lido, cadastro, fonte, "O documento não confere com o cadastro.");
     }
 
-    private static Verificacao carteirinha(DocumentoLido doc, Paciente p, LocalDate hoje) {
+    private static Verificacao carteirinha(DocumentoLido doc, Paciente p, LocalDate hoje, LocalDate diaVisita) {
         String titulo = "Carteirinha do convênio";
         String numero = doc.campo(LeitorDocumento.NUMERO_CARTEIRINHA);
         String convenio = doc.campo(LeitorDocumento.CONVENIO);
         LocalDate validade = data(doc.campo(LeitorDocumento.VALIDADE));
         String lido = numero == null ? null : numero + " (" + convenio + ", validade " + doc.campo(LeitorDocumento.VALIDADE) + ")";
         String cadastro = p.numeroCarteirinha() + " (" + p.convenio() + ", validade " + p.validadeCarteirinha().format(BR) + ")";
-        String fonte = BaseSintetica.FONTE_CADASTRO + " + data do sistema";
+        String fonte = BaseSintetica.FONTE_CADASTRO + " + data do sistema e da visita";
 
         if (numero == null || convenio == null || validade == null) {
             return new Verificacao("CARTEIRINHA", titulo, AUSENTE, lido, cadastro, fonte, "Faltam dados legíveis na carteirinha.");
@@ -192,14 +196,18 @@ public final class Conferencia {
             return new Verificacao("CARTEIRINHA", titulo, DIVERGENTE, lido, cadastro, fonte,
                     "Carteirinha vencida em " + validade.format(BR) + ".");
         }
+        if (validade.isBefore(diaVisita)) {
+            return new Verificacao("CARTEIRINHA", titulo, DIVERGENTE, lido, cadastro, fonte,
+                    "A carteirinha vence em " + validade.format(BR) + ", antes do dia da visita (" + diaVisita.format(BR) + ").");
+        }
         return new Verificacao("CARTEIRINHA", titulo, OK, lido, cadastro, fonte, "Número e convênio conferem; dentro da validade.");
     }
 
-    private static Verificacao guia(Guia g, Paciente p, LocalDate hoje) {
+    private static Verificacao guia(Guia g, Paciente p, LocalDate hoje, LocalDate diaVisita) {
         String titulo = "Guia do convênio";
         String fonte = BaseSintetica.FONTE_GUIAS;
         if (g == null) {
-            return new Verificacao("GUIA", titulo, AUSENTE, null, null, fonte, "Não há guia para o agendamento de hoje.");
+            return new Verificacao("GUIA", titulo, AUSENTE, null, null, fonte, "Não há guia para a visita marcada.");
         }
         String cadastro = g.numero() + " (" + g.status() + ", validade " + g.validade().format(BR) + ")";
         if (!"AUTORIZADA".equals(g.status())) {
@@ -207,6 +215,10 @@ public final class Conferencia {
         }
         if (g.validade().isBefore(hoje)) {
             return new Verificacao("GUIA", titulo, DIVERGENTE, null, cadastro, fonte, "A guia está vencida.");
+        }
+        if (g.validade().isBefore(diaVisita)) {
+            return new Verificacao("GUIA", titulo, DIVERGENTE, null, cadastro, fonte,
+                    "A guia vence em " + g.validade().format(BR) + ", antes do dia da visita (" + diaVisita.format(BR) + ").");
         }
         if (!g.numeroCarteirinha().equalsIgnoreCase(p.numeroCarteirinha())) {
             return new Verificacao("GUIA", titulo, DIVERGENTE, null, cadastro, fonte, "A guia é de outra carteirinha.");
@@ -218,7 +230,7 @@ public final class Conferencia {
         return new Verificacao(codigo, titulo, NAO_AVALIADO, null, null, fonte, detalhe);
     }
 
-    private static LocalDate data(String s) {
+    static LocalDate data(String s) {
         if (s == null) return null;
         try {
             return LocalDate.parse(s.trim(), BR);

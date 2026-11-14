@@ -25,9 +25,9 @@ public final class BaseSintetica {
     public static final String FONTE_GUIAS = "Base sintética de guias do convênio";
 
     private final Map<String, Paciente> pacientesPorCpf = new LinkedHashMap<>();
-    private final Map<String, Agendamento> agendamentosPorPaciente = new LinkedHashMap<>();
+    private final Map<String, Pedido> pedidosPorPaciente = new LinkedHashMap<>();
+    private final Map<String, Agendamento> agendamentosPorPaciente = new LinkedHashMap<>(); // começa vazio
     private final Map<String, Guia> guiasPorAgendamento = new LinkedHashMap<>();
-    private final Map<String, Agendamento> agendaOriginal = new LinkedHashMap<>();
 
     /** Grade da unidade fictícia: de 07:00 às 19:30, a cada 30 minutos. */
     public static final List<String> GRADE;
@@ -37,10 +37,14 @@ public final class BaseSintetica {
         GRADE = List.copyOf(g);
     }
 
-    /** Horários já ocupados por outros pacientes fictícios (fora da base), por serviço. */
-    private static final Map<String, Set<String>> OCUPADOS_FICTICIOS = Map.of(
-            "Consulta agendada", Set.of("08:00", "09:00", "09:30", "12:00", "13:30", "16:00", "17:30", "18:30"),
-            "Exame agendado", Set.of("07:30", "08:30", "10:00", "13:00", "15:00", "16:30", "18:00"));
+    /** Quantos dias a agenda abre para o paciente escolher: hoje e os 6 seguintes. */
+    public static final int DIAS_DA_AGENDA = 7;
+
+    /**
+     * O que o paciente tem para agendar: o pedido que gerou a guia. O local (próxima etapa) só aparece para o
+     * paciente depois do check-in. O id é o do agendamento que a guia cita, criado quando o paciente escolhe o horário.
+     */
+    public record Pedido(String agendamentoId, String servico, String proximaEtapa) {}
 
     /** Um horário da grade, na visão de um paciente: livre para ele, ocupado ou o que ele já tem. */
     public record Horario(String horario, boolean disponivel, boolean atual) {}
@@ -57,12 +61,12 @@ public final class BaseSintetica {
         paciente(new Paciente("P5", "Tereza Cristina Barbosa", "555.666.777-00", LocalDate.of(1949, 5, 21),
                 "Convênio Aurora (fictício)", "AUR-0005-2026", hoje.plusMonths(3)));
 
-        agendamento(new Agendamento("A1", "P1", hoje, "10:30", "Consulta agendada", "Triagem, sala 2"));
-        agendamento(new Agendamento("A2", "P2", hoje, "11:00", "Exame agendado", "Coleta, guichê 4"));
-        agendamento(new Agendamento("A3", "P3", hoje, "11:30", "Consulta agendada", "Triagem, sala 2"));
-        agendamento(new Agendamento("A4", "P4", hoje, "14:00", "Exame agendado", "Imagem, recepção B"));
-        agendamento(new Agendamento("A5", "P5", hoje, "15:30", "Consulta agendada", "Triagem, sala 1"));
-        agendaOriginal.putAll(agendamentosPorPaciente);
+        // Ninguém começa com horário marcado: cada paciente tem um pedido e escolhe o dia e o horário no portal.
+        pedidosPorPaciente.put("P1", new Pedido("A1", "Consulta eletiva", "Triagem, sala 2"));
+        pedidosPorPaciente.put("P2", new Pedido("A2", "Exame laboratorial", "Coleta, guichê 4"));
+        pedidosPorPaciente.put("P3", new Pedido("A3", "Consulta eletiva", "Triagem, sala 2"));
+        pedidosPorPaciente.put("P4", new Pedido("A4", "Exame de imagem", "Imagem, recepção B"));
+        pedidosPorPaciente.put("P5", new Pedido("A5", "Consulta eletiva", "Triagem, sala 1"));
 
         guia(new Guia("G-2026-0001", "A1", "AUR-0001-2026", "Consulta eletiva", "AUTORIZADA", hoje.plusDays(20)));
         guia(new Guia("G-2026-0002", "A2", "HOR-0002-2026", "Exame laboratorial", "AUTORIZADA", hoje.plusDays(15)));
@@ -72,53 +76,74 @@ public final class BaseSintetica {
     }
 
     private void paciente(Paciente p) { pacientesPorCpf.put(digitos(p.cpf()), p); }
-    private void agendamento(Agendamento a) { agendamentosPorPaciente.put(a.pacienteId(), a); }
     private void guia(Guia g) { guiasPorAgendamento.put(g.agendamentoId(), g); }
 
     public Optional<Paciente> pacientePorCpf(String cpf) {
         return Optional.ofNullable(cpf == null ? null : pacientesPorCpf.get(digitos(cpf)));
     }
 
-    public Optional<Agendamento> agendamentoDoDia(String pacienteId, LocalDate dia) {
+    public Optional<Pedido> pedido(String pacienteId) {
+        return Optional.ofNullable(pedidosPorPaciente.get(pacienteId));
+    }
+
+    /** A visita marcada do paciente, de hoje em diante (vazio se ele ainda não escolheu dia e horário). */
+    public Optional<Agendamento> proximaVisita(String pacienteId, LocalDate hoje) {
         Agendamento a = agendamentosPorPaciente.get(pacienteId);
-        return Optional.ofNullable(a != null && a.data().equals(dia) ? a : null);
+        return Optional.ofNullable(a != null && !a.data().isBefore(hoje) ? a : null);
     }
 
     public Optional<Guia> guiaDoAgendamento(String agendamentoId) {
         return Optional.ofNullable(guiasPorAgendamento.get(agendamentoId));
     }
 
-    /** Horários de hoje ainda por vir, na agenda do mesmo serviço do agendamento do paciente. */
-    public List<Horario> horarios(String pacienteId, LocalDate dia, LocalTime agora) {
-        Agendamento proprio = agendamentoDoDia(pacienteId, dia).orElse(null);
-        if (proprio == null) return List.of();
-        Set<String> ocupados = new HashSet<>(OCUPADOS_FICTICIOS.getOrDefault(proprio.servico(), Set.of()));
+    /** Dias em que a agenda está aberta para o paciente escolher. */
+    public static List<LocalDate> diasDaAgenda(LocalDate hoje) {
+        List<LocalDate> dias = new ArrayList<>();
+        for (int i = 0; i < DIAS_DA_AGENDA; i++) dias.add(hoje.plusDays(i));
+        return dias;
+    }
+
+    /**
+     * Horários de um dia na agenda do serviço do pedido do paciente. Em hoje, só os que ainda vão acontecer.
+     * Ocupados: os de outros pacientes da base no mesmo serviço e uma ocupação fictícia fixa por dia e serviço.
+     */
+    public List<Horario> horarios(String pacienteId, LocalDate dia, LocalDate hoje, LocalTime agora) {
+        Pedido pedido = pedidosPorPaciente.get(pacienteId);
+        if (pedido == null || dia.isBefore(hoje)) return List.of();
+        Agendamento proprio = agendamentosPorPaciente.get(pacienteId);
+        Set<String> ocupados = new HashSet<>();
         for (Agendamento a : agendamentosPorPaciente.values()) {
-            if (!a.id().equals(proprio.id()) && a.servico().equals(proprio.servico()) && a.data().equals(dia)) {
+            if (!a.pacienteId().equals(pacienteId) && a.servico().equals(pedido.servico()) && a.data().equals(dia)) {
                 ocupados.add(a.horario());
             }
         }
         List<Horario> l = new ArrayList<>();
-        for (String h : GRADE) {
-            if (!LocalTime.parse(h).isAfter(agora)) continue;
-            boolean atual = h.equals(proprio.horario());
-            l.add(new Horario(h, !atual && !ocupados.contains(h), atual));
+        for (int i = 0; i < GRADE.size(); i++) {
+            String h = GRADE.get(i);
+            if (dia.equals(hoje) && !LocalTime.parse(h).isAfter(agora)) continue;
+            boolean atual = proprio != null && proprio.data().equals(dia) && h.equals(proprio.horario());
+            boolean livre = !atual && !ocupados.contains(h) && !ocupadoFicticio(pedido.servico(), dia, i);
+            l.add(new Horario(h, livre, atual));
         }
         return l;
     }
 
-    /** Troca o horário do agendamento de hoje. Quem chama valida antes, com {@link #horarios}. */
-    public Agendamento remarcar(String pacienteId, LocalDate dia, String horario) {
-        Agendamento a = agendamentoDoDia(pacienteId, dia).orElseThrow();
-        Agendamento novo = new Agendamento(a.id(), a.pacienteId(), a.data(), horario, a.servico(), a.proximaEtapa());
+    /** Ocupação fictícia, sempre a mesma para o mesmo dia e serviço (cerca de um em cada quatro horários). */
+    private static boolean ocupadoFicticio(String servico, LocalDate dia, int indice) {
+        return Math.floorMod(indice * 7 + dia.getDayOfYear() * 3 + servico.length(), 4) == 0;
+    }
+
+    /** Marca (ou troca) a visita do paciente. Quem chama valida antes, com {@link #horarios}. */
+    public Agendamento agendar(String pacienteId, LocalDate dia, String horario) {
+        Pedido p = pedidosPorPaciente.get(pacienteId);
+        Agendamento novo = new Agendamento(p.agendamentoId(), pacienteId, dia, horario, p.servico(), p.proximaEtapa());
         agendamentosPorPaciente.put(pacienteId, novo);
         return novo;
     }
 
-    /** Volta a agenda para os horários iniciais (usado ao zerar a demo). */
+    /** Apaga os horários marcados (usado ao zerar a demo): todos voltam a não ter visita marcada. */
     public void reiniciarAgenda() {
         agendamentosPorPaciente.clear();
-        agendamentosPorPaciente.putAll(agendaOriginal);
     }
 
     public Iterable<Paciente> pacientes() { return pacientesPorCpf.values(); }

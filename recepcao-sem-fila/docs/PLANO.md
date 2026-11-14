@@ -6,11 +6,11 @@ Complementa o brief da equipe. Onde não há evidência, está marcado como hip�
 
 | | |
 |---|---|
-| **Entrada** | Paciente com visita não emergencial agendada entra na conta do portal (login simulado) e envia documento de identidade e carteirinha (fictícios). A cada arquivo, o assistente mostra o que foi lido para o paciente conferir. |
-| **Decisão** | O sistema lê os documentos e confere, por regra fixa: leitura completa, cadastro pelo CPF, nome, nascimento, carteirinha (número, convênio, validade), agendamento do dia e guia (autorizada, válida, da mesma carteirinha). |
+| **Entrada** | Paciente com um pedido não emergencial (consulta ou exame) entra na conta do portal (login simulado), escolhe o dia e o horário da visita e envia documento de identidade e carteirinha (fictícios). A cada arquivo, o assistente mostra o que foi lido para o paciente conferir. |
+| **Decisão** | O sistema lê os documentos e confere, por regra fixa: leitura completa, cadastro pelo CPF, nome, nascimento, carteirinha (número, convênio, validade até o dia da visita), visita marcada e guia (autorizada, válida até o dia da visita, da mesma carteirinha). |
 | **Ação** | Tudo confere: o paciente confirma a guia e, ao chegar, confirma a chegada. |
 | **Saída** | Passagem registrada, senha emitida e próxima etapa indicada. Tempo e desfecho entram nas medidas. |
-| **Exceção** | Qualquer divergência ou dado ausente: atendimento remoto, com motivo, valor lido, valor da base e fonte. O atendente libera ou encaminha ao apoio presencial. O paciente pode pedir uma pessoa a qualquer momento. |
+| **Exceção** | Qualquer divergência ou dado ausente: atendimento remoto, com motivo, valor lido, valor da base e fonte. O atendente libera ou encaminha ao apoio presencial. O paciente pode pedir uma pessoa a qualquer momento (o botão fica junto das opções quando um documento dá problema). O apoio no balcão é marcado para o dia e o horário da visita, não para a hora do pedido. |
 
 ## Estados
 
@@ -19,24 +19,30 @@ AGUARDANDO_DOCUMENTOS ─ok→ AGUARDANDO_CONFIRMACAO_GUIA → PRONTO_PARA_CHEGA
         │ falha                                                  ↑ liberado por uma pessoa
         └────────→ ATENDIMENTO_REMOTO ─────────────────────────┘
                           │ encaminhado
-   pedido de ajuda ──→ APOIO_PRESENCIAL ──→ CONCLUIDO (registrado por uma pessoa)
+   pedido de ajuda ──→ APOIO_PRESENCIAL ──(paciente confirma a chegada: senha de apoio)──→ CONCLUIDO (registrado por uma pessoa)
+                            │ paciente volta antes de chegar (só se foi ele quem pediu)
+                            └──→ estado em que estava antes do pedido
 
 ATENDIMENTO_REMOTO ─(pendência de documento: paciente reenvia e a nova conferência passa)→ AGUARDANDO_CONFIRMACAO_GUIA
                    (até 2 reenvios; se ainda falhar, continua com a pessoa)
 ```
 
-Antes do check-in, o paciente logado pode trocar o horário da visita de hoje por um horário livre da agenda
-sintética do mesmo serviço. Um check-in em aberto passa a usar o novo horário.
+Agenda: o paciente entra sem visita marcada e escolhe o dia (hoje e os próximos 6) e um horário livre da agenda
+sintética do serviço do pedido. O check-in só começa com a visita marcada. Ele pode trocar o dia ou o horário
+depois; um check-in em aberto passa a usar a nova visita, desde que a guia e a carteirinha conferidas continuem
+válidas no novo dia. O local do atendimento só aparece depois da conferência, e a chegada só é aceita no dia
+da visita.
 
-Estados de interface do paciente: login (simulado), início da conta com a visita de hoje, envio de documentos com a leitura de cada um, guia para confirmar, pronto para a chegada,
-senha emitida, aguardando atendimento remoto, senha de apoio presencial, erro de comunicação.
+Estados de interface do paciente: login (simulado), início da conta sem visita (agenda: dia e horário), visita marcada (com opção de trocar), envio de documentos com a leitura de cada um, guia para confirmar, pronto para a chegada (botão de chegada só no dia da visita),
+senha emitida, aguardando atendimento remoto, apoio presencial marcado (aguardando a chegada), senha de apoio presencial,
+erro de comunicação.
 Estados do painel: fila vazia, caso aguardando ação, caso concluído, erro ao registrar sem nome ou observação.
 
 ## Contratos de dados
 
 - **DocumentoLido**: `tipo`, `campos` (nome, cpf, nascimento | convenio, numeroCarteirinha, validade), `ausentes`, `fonte`.
 - **Verificacao**: `codigo`, `titulo`, `resultado` (OK, DIVERGENTE, AUSENTE, SIMULADO, NAO_AVALIADO), `valorLido`, `valorCadastro` (só para o atendente), `fonte`, `detalhe`.
-- **CheckIn**: `id`, `status`, `desfechoInicial`, `tempoAteDesfechoSeg`, `tempoTotalSeg`, `motivos`, `senha`, `verificacoes`, `agendamento`, `guia`, `eventos` (só para o atendente).
+- **CheckIn**: `id`, `status`, `desfechoInicial`, `tempoAteDesfechoSeg`, `tempoTotalSeg`, `motivos`, `senha`, `diaApoio`, `horarioApoio`, `verificacoes`, `agendamento`, `guia`, `eventos` (só para o atendente).
 - **Evento**: `quando`, `ator` (PACIENTE, SISTEMA, ATENDENTE nome), `descricao`.
 
 A API está no README.
