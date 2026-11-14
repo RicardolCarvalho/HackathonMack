@@ -39,6 +39,10 @@ import static br.com.recepcaosemfila.dominio.StatusCheckIn.PRONTO_PARA_CHEGADA;
  * O sistema nunca "resolve" uma exceção sozinho: toda falha vai para uma pessoa, com nome e observação registrados.
  */
 public final class CheckInServico {
+    private static final int LIMITE_ATENDENTE = 60;
+    private static final int LIMITE_OBSERVACAO = 400;
+    private static final int LIMITE_MOTIVO_AJUDA = 200;
+
     private final Clock relogio;
     private final LeitorDocumento leitor;
     private final Conferencia conferencia;
@@ -286,6 +290,9 @@ public final class CheckInServico {
         CheckIn c = buscar(id);
         if (c.status == CONCLUIDO) throw new RegraException(409, "Este check-in já foi concluído.");
         if (c.status == APOIO_PRESENCIAL) return c;
+        if (motivo != null && motivo.trim().length() > LIMITE_MOTIVO_AJUDA) {
+            throw new RegraException(400, "O motivo da ajuda deve ter no máximo " + LIMITE_MOTIVO_AJUDA + " caracteres.");
+        }
         c.ajudaPedidaPeloPaciente = true;
         c.status = APOIO_PRESENCIAL;
         c.senha = String.format("P-%03d", ++senhasApoio);
@@ -424,6 +431,12 @@ public final class CheckInServico {
     private static void exigirRegistro(String atendente, String observacao) {
         if (atendente == null || atendente.isBlank() || observacao == null || observacao.isBlank()) {
             throw new RegraException(400, "Informe o nome de quem atendeu e uma observação: toda exceção fica registrada.");
+        }
+        if (atendente.trim().length() > LIMITE_ATENDENTE) {
+            throw new RegraException(400, "O nome do atendente deve ter no máximo " + LIMITE_ATENDENTE + " caracteres.");
+        }
+        if (observacao.trim().length() > LIMITE_OBSERVACAO) {
+            throw new RegraException(400, "A observação deve ter no máximo " + LIMITE_OBSERVACAO + " caracteres.");
         }
     }
 
