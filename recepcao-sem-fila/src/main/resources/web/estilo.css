@@ -220,6 +220,7 @@ dialog > * + * { margin-top: 14px; }
 /* ---------- Painel de atendimento ---------- */
 .painel { max-width: 1120px; margin: 0 auto; padding: 24px 20px 60px; }
 .painel > * + * { margin-top: 20px; }
+#titulo-medidas { font-size: 1.65rem; }
 
 .medidas {
   display: grid;
@@ -231,7 +232,7 @@ dialog > * + * { margin-top: 14px; }
 }
 .medida { padding: 16px 18px; box-shadow: 1px 1px 0 var(--linha); }
 .medida .valor { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
-.medida .rotulo { font-size: 0.8125rem; color: var(--tinta-suave); margin-top: 4px; }
+.medida .rotulo { font-size: 0.95rem; font-weight: 700; color: var(--tinta-suave); margin-top: 6px; }
 
 .abas { display: flex; gap: 8px; flex-wrap: wrap; }
 .abas button { background: transparent; color: var(--tinta); border-color: var(--linha); padding: 8px 14px; }
@@ -247,6 +248,17 @@ dialog > * + * { margin-top: 14px; }
   display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center;
 }
 .caso summary::-webkit-details-marker { display: none; }
+.identificacao-caso { margin-top: 8px; }
+.dados-caso { display: grid; gap: 3px; color: var(--tinta-suave); font-size: 0.95rem; }
+.dados-caso strong { color: var(--tinta); }
+.motivo-caso { margin-top: 12px; font-size: 0.95rem; }
+.motivo-caso strong { display: block; color: var(--tinta); }
+.motivo-caso ul { margin: 4px 0 0; padding-left: 20px; }
+.motivo-caso li + li { margin-top: 2px; }
+.motivo-caso li strong { display: inline; }
+.senha-caso { min-width: 104px; text-align: center; padding: 10px 14px; border-radius: 10px; background: var(--senha); color: var(--tinta); }
+.rotulo-senha { display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.senha-caso strong { display: block; font-size: 1.65rem; line-height: 1.1; margin-top: 2px; }
 .caso .corpo { padding: 0 20px 20px; }
 .caso .corpo > * + * { margin-top: 16px; }
 

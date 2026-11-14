@@ -21,7 +21,7 @@ const ACOES = {
   },
   'encaminhar-presencial': {
     titulo: 'Encaminhar ao apoio presencial',
-    texto: 'Use quando o caso precisa ser concluído no balcão, com o documento original.',
+    texto: 'Passe o caso para o balcão sem resolver as pendências. O apoio presencial confere o documento original e conclui o atendimento.',
   },
   'concluir-presencial': {
     titulo: 'Registrar atendimento presencial',
@@ -48,19 +48,17 @@ async function atualizar() {
 function desenharMedidas(m) {
   const decisoes = m.decisoesAvaliadas
     ? `${m.decisoesCorretas} de ${m.decisoesAvaliadas} (${m.proporcaoDecisoesCorretas.toLocaleString('pt-BR')}%)`
-    : 'sem dado';
+    : 'Sem dado';
   const itens = [
-    [m.total, 'check-ins iniciados'],
-    [m.concluidosAutomaticamente, 'concluídos sem intervenção'],
-    [m.escaladosRemoto, 'encaminhados ao atendimento remoto'],
-    [m.apoioPresencialAPedido, 'pedidos de apoio presencial'],
-    [segundos(m.tempoMedioAteDesfechoSeg), 'tempo médio até o desfecho'],
-    [segundos(m.tempoMedioConcluidoAutomaticoSeg), 'tempo médio dos concluídos sem intervenção'],
-    [decisoes, 'decisões do sistema iguais ao gabarito'],
+    [m.total, 'Check-ins iniciados'],
+    [m.concluidosAutomaticamente, 'Concluídos sem intervenção'],
+    [m.escaladosRemoto, 'Encaminhados ao atendimento remoto'],
+    [m.apoioPresencialAPedido, 'Pedidos de apoio presencial'],
+    [segundos(m.tempoMedioAteDesfechoSeg), 'Tempo médio até o desfecho'],
+    [decisoes, 'Decisões do sistema iguais ao gabarito'],
   ];
   document.getElementById('medidas').replaceChildren(...itens.map(([valor, rotulo]) =>
     el('div', { class: 'medida' }, el('div', { class: 'valor' }, valor), el('div', { class: 'rotulo' }, rotulo))));
-  document.getElementById('como-ler').textContent = m.comoLer;
 }
 
 // ---------- Casos ----------
@@ -77,23 +75,30 @@ function desenharCasos() {
 }
 
 function cartaoCaso(c) {
-  const precisaDeAcao = c.status === 'ATENDIMENTO_REMOTO' || c.status === 'APOIO_PRESENCIAL';
-  const aberto = aberturaManual.has(c.id) ? aberturaManual.get(c.id) : precisaDeAcao;
+  const aberto = aberturaManual.has(c.id) ? aberturaManual.get(c.id) : false;
   const nome = c.pacienteCadastro || c.nomeLido || 'Paciente não identificado';
+  const identificacao = el('div', { class: 'identificacao-caso' },
+    el('div', { class: 'dados-caso' },
+      el('div', {}, el('strong', {}, 'CPF: '), c.cpfLido || 'não lido'),
+      el('div', {}, el('strong', {}, 'Kit fictício: '), c.kitId ? '"' + c.kitId + '"' : 'sem kit'),
+      el('div', {}, el('strong', {}, 'Check-in: '), c.id.slice(0, 8))));
+  const motivo = c.motivos.length
+    ? el('div', { class: 'motivo-caso' },
+      el('strong', {}, 'Por que está aqui'),
+      el('ul', {}, c.motivos.map((m) => el('li', {}, el('strong', {}, m)))))
+    : null;
+  const senha = c.senha
+    ? el('div', { class: 'senha-caso' }, el('span', { class: 'rotulo-senha' }, 'Senha'), el('strong', {}, c.senha))
+    : null;
 
   const detalhes = el('details', { class: 'caso ' + c.status, open: aberto },
     el('summary', {},
       el('div', {},
         el('h3', {}, nome, ' ', el('span', { class: 'etiqueta ' + c.status }, ROTULO_STATUS[c.status])),
-        el('div', { class: 'suave pequeno' },
-          [c.cpfLido ? 'CPF ' + c.cpfLido : 'CPF não lido',
-            c.kitId ? 'kit fictício "' + c.kitId + '"' : 'sem kit',
-            'check-in ' + c.id.slice(0, 8)].join(', '))),
-      el('div', { class: 'pequeno' },
-        c.senha ? el('div', {}, 'Senha ', el('strong', {}, c.senha)) : null,
-        c.tempoAteDesfechoSeg !== null ? el('div', { class: 'suave' }, 'Desfecho em ' + segundos(c.tempoAteDesfechoSeg)) : null)),
+        identificacao,
+        motivo),
+      senha),
     el('div', { class: 'corpo' },
-      c.motivos.length ? el('div', {}, el('h3', {}, 'Por que está aqui'), el('ul', {}, c.motivos.map((m) => el('li', {}, m)))) : null,
       botoes(c),
       c.verificacoes.length ? tabelaVerificacoes(c) : null,
       el('p', { class: 'pequeno suave' }, textoGabarito(c)),
@@ -110,7 +115,7 @@ function botoes(c) {
   if (c.status === 'ATENDIMENTO_REMOTO') {
     return el('div', { class: 'acoes' },
       el('button', { class: 'livre', onclick: () => abrirAcao(c, 'resolver') }, 'Resolver e liberar'),
-      el('button', { class: 'secundario', onclick: () => abrirAcao(c, 'encaminhar-presencial') }, 'Encaminhar ao apoio presencial'));
+      el('button', { class: 'secundario', onclick: () => abrirAcao(c, 'encaminhar-presencial') }, 'Encaminhar sem resolver'));
   }
   if (c.status === 'APOIO_PRESENCIAL') {
     return el('div', { class: 'acoes' },
