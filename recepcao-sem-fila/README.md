@@ -33,31 +33,36 @@ se mudar o código e quiser um jar novo, gere com `mvn package` (sai em `target/
 
 Abra a tela do paciente e o painel lado a lado. No painel, use "Zerar a demo" antes de começar.
 
-O paciente entra na conta dele (login simulado; as contas fictícias aparecem na tela de login, senha `demo`),
-vê a visita de hoje e pode **escolher outro horário** livre (agenda sintética de hoje, de 07:00 às 19:30, a cada
-30 minutos; horários passados não aparecem e os ocupados aparecem riscados). Depois envia o documento de
-identidade e a carteirinha antes de sair de casa. A cada arquivo enviado, o assistente de check-in mostra o
+O paciente entra na conta dele (login simulado; as contas fictícias aparecem na tela de login, senha `demo`)
+e vê o pedido que tem para agendar (por exemplo, "consulta eletiva"), **sem horário marcado e sem o local**.
+Ele **escolhe o dia e o horário** na agenda sintética do serviço: hoje e os próximos 6 dias, de 07:00 às 19:30,
+a cada 30 minutos (horários passados não aparecem; os ocupados aparecem riscados). Dá para trocar o dia ou o
+horário depois, inclusive com o check-in feito. O local do atendimento só aparece depois da conferência.
+Com a visita marcada, envia o documento de identidade e a carteirinha antes de sair de casa. A cada arquivo enviado, o assistente de check-in mostra o
 que leu (nome, CPF, nascimento; convênio, número, validade), o que não conseguiu ler e, na carteirinha, se ela
 está vencida. Os dois documentos só vão para a conferência quando o paciente confirma.
 Cada documento pode ser o exemplo fictício da conta ("Usar o documento fictício de exemplo") ou um arquivo
 SVG enviado (por exemplo, salvo de `/api/kits/ana/identidade.svg`).
 
-1. **Cadastro correto.** Conta "Ana Beatriz" → (opcional) Escolher outro horário → Começar check-in →
-   exemplo nos dois → o assistente mostra os campos lidos → enviar → Confirmar guia → Cheguei ao hospital →
-   senha A-001 e próxima etapa. Nenhuma pessoa da recepção foi acionada.
+1. **Cadastro correto.** Conta "Ana Beatriz" → escolher o dia (hoje) e um horário → Agendar → Começar
+   check-in → exemplo nos dois → o assistente mostra os campos lidos → enviar → Confirmar guia → Cheguei ao
+   hospital → senha A-001 e próxima etapa. Nenhuma pessoa da recepção foi acionada. Para a demo terminar na
+   senha, agende para hoje: com a visita em outro dia, o check-in vale, mas "Cheguei ao hospital" só libera no
+   dia da visita.
 2. **Informação divergente.** Conta "Carlos Eduardo" → a data de nascimento lida não bate com o cadastro →
    o caso aparece no painel, em "Atendimento remoto", com o valor lido, o valor da base e a fonte de cada
    um → o atendente clica em "Resolver e liberar", informa nome e observação → a tela do paciente atualiza
    sozinha e ele confirma a chegada.
 3. **Atendimento humano acionado.** Em qualquer etapa, "Falar com uma pessoa". Quando um documento dá
    problema (na leitura ou na conferência) e na tela da guia, o botão aparece junto das outras opções da tela;
-   nas demais etapas, no canto → o apoio no balcão fica marcado para o **horário da visita de hoje**, não para a
-   hora do pedido → o caso aparece em "Apoio presencial", com o horário do balcão e em ordem de horário,
+   nas demais etapas, no canto → o apoio no balcão fica marcado para o **dia e o horário da visita**, não para a
+   hora do pedido → o caso aparece em "Apoio presencial", com o dia e o horário do balcão e nessa ordem,
    aguardando a chegada → como no fluxo normal, ao chegar o paciente toca em "Cheguei ao hospital" e só então
    recebe a senha de apoio P-001 → o atendente registra o atendimento no balcão (só depois da chegada).
 
-**Voltar.** Na tela de documentos, "Voltar" leva ao início da conta (dá para trocar o horário) e o check-in
-continua de onde parou com "Continuar check-in". Com o apoio no balcão marcado pelo próprio paciente e antes da
+**Voltar.** Na tela de documentos, "Voltar" leva ao início da conta (dá para trocar o dia ou o horário) e o
+check-in continua de onde parou com "Continuar check-in". Na tela de pré-check-in concluído, "Trocar dia ou
+horário" faz o mesmo. Com o apoio no balcão marcado pelo próprio paciente e antes da
 chegada, "Voltar" cancela o apoio e devolve o paciente à tela em que estava (um caso com pendência continua no
 atendimento remoto). Apoio definido pelo atendimento, ou com a chegada já registrada, não tem volta pela tela do
 paciente. As outras etapas não têm "Voltar" porque a conferência já foi feita.
@@ -66,7 +71,7 @@ paciente. As outras etapas não têm "Voltar" porque a conferência já foi feit
 vai para o atendimento remoto como sempre, e o paciente ganha a opção "Resolver agora": envia o documento
 atualizado/correto, que passa pela mesma conferência. Se nada falhar, o check-in segue para a guia sem
 esperar a pessoa; se ainda falhar, continua com o atendimento. Até 2 reenvios por caso; tudo fica no
-histórico e o desfecho inicial (encaminhado) não muda nas medidas. Pendência de guia ou agendamento não
+histórico e o desfecho inicial (encaminhado) não muda nas medidas. Pendência de guia ou de visita não
 tem reenvio: depende do hospital ou do convênio. Na demo, "Usar … de exemplo" no reenvio traz a versão
 correta do cenário: Marina → carteirinha renovada; Carlos → documento com o nascimento certo; Tereza →
 documento legível.
@@ -95,7 +100,7 @@ comparação com a recepção atual: não temos linha de base medida (hipótese 
 ```
 src/main/java/br/com/recepcaosemfila
   App.java                    monta tudo e sobe o servidor
-  dados/BaseSintetica.java    pacientes, agendamentos e guias inventados (datas relativas a hoje)
+  dados/BaseSintetica.java    pacientes, pedidos, agenda e guias inventados (datas relativas a hoje)
   dados/KitsFicticios.java    documentos fictícios da demo, desenhados em SVG, com gabarito
   dados/ContasSinteticas.java contas do portal (login simulado), uma por paciente, ligada ao kit do cenário
   servico/LeitorDocumento     contrato do OCR; LeitorSvgSimulado é a implementação da PoC
@@ -103,7 +108,7 @@ src/main/java/br/com/recepcaosemfila
   servico/CheckInServico.java máquina de estados, histórico e medidas
   web/Servidor.java           API em /api e telas (HttpServer do JDK); web/Json.java
 src/main/resources/web        tela do paciente e painel (HTML, CSS e JS puros)
-src/test/java                 VerificaCenarios: sucesso, divergência, dado ausente, apoio humano, horário, reenvio
+src/test/java                 VerificaCenarios: sucesso, divergência, dado ausente, apoio humano, agenda, reenvio
 docs/PLANO.md                 microjornada, contratos, estados, objeções e divisão de tarefas
 ```
 
@@ -113,10 +118,15 @@ Regras que valem em todo o fluxo:
   nem aprova exceção. O reenvio não muda isso: o documento novo passa pelas mesmas regras, e só segue se
   nenhuma falhar.
 - Toda ação do atendimento exige nome e observação e fica no histórico do caso.
-- O apoio presencial (pedido pelo paciente ou encaminhado pelo atendimento) é marcado para o horário da visita
-  de hoje, tirado da agenda sintética. Sem visita à frente hoje (por exemplo, o horário já passou), é assim que o
-  paciente chegar. Se o paciente troca o horário da visita, o apoio acompanha. A senha de apoio só sai quando o
-  paciente confirma a chegada ao hospital, como a senha do fluxo normal.
+- O paciente só começa o check-in com a visita marcada (dia e horário escolhidos por ele). A conferência vale
+  para o dia da visita: carteirinha e guia precisam estar válidas até esse dia. Trocar para um dia em que a guia
+  ou a carteirinha já venceram, depois da conferência, é recusado (o paciente escolhe outro dia ou fala com uma
+  pessoa). A chegada ("Cheguei ao hospital") só é aceita no dia da visita.
+- O local do atendimento (por exemplo, "Triagem, sala 2") só aparece para o paciente depois da conferência.
+- O apoio presencial (pedido pelo paciente ou encaminhado pelo atendimento) é marcado para o dia e o horário da
+  visita. Sem visita à frente (por exemplo, o horário de hoje já passou), é assim que o paciente chegar. Se o
+  paciente troca o dia ou o horário da visita, o apoio acompanha. A senha de apoio só sai quando o paciente
+  confirma a chegada ao hospital, como a senha do fluxo normal.
 - Cada conferência registra a fonte (OCR simulado, conta do paciente, base cadastral sintética, agenda, base de guias).
 - Com conta, o documento precisa ser do titular (mesmo CPF); sem CPF legível ou com CPF de outra pessoa, vai para uma pessoa.
 - A leitura de cada documento só mostra ao paciente o que foi lido do arquivo que ele mesmo enviou; não confere
@@ -137,17 +147,17 @@ troque a instância em `App.java`. Antes de depender do serviço, confirme acess
 |---|---|
 | `GET /api/kits` | lista os kits fictícios; `GET /api/kits/{id}/identidade.svg` e `/carteirinha.svg` |
 | `GET /api/contas` | contas fictícias da demo (e-mail, nome, cenário) |
-| `POST /api/contas/entrar` | corpo `{email, senha}`; login simulado, devolve a conta e a visita de hoje |
-| `GET /api/contas/{id}` | resumo da conta: visita de hoje e horários (livres, ocupados, o atual) |
-| `POST /api/contas/{id}/horario` | corpo `{horario}`; troca o horário da visita de hoje por um livre |
-| `POST /api/checkins` | corpo `{contaId?}`; inicia um check-in (começa a contar o tempo) |
+| `POST /api/contas/entrar` | corpo `{email, senha}`; login simulado, devolve o resumo da conta |
+| `GET /api/contas/{id}` | resumo da conta: serviço do pedido, visita marcada (ou `null`) e a agenda de 7 dias com os horários (livres, ocupados, o atual); sem o local |
+| `POST /api/contas/{id}/agendamento` | corpo `{dia: AAAA-MM-DD, horario}`; marca ou troca o dia e o horário da visita por um livre |
+| `POST /api/checkins` | corpo `{contaId?}`; inicia um check-in (começa a contar o tempo); com conta, exige visita marcada |
 | `GET /api/checkins/{id}` | estado do check-in, na visão do paciente |
 | `POST /api/checkins/{id}/leitura` | corpo `{tipo: IDENTIDADE\|CARTEIRINHA, svg}`; devolve os campos lidos e alertas (ex.: vencida), sem conferir |
 | `POST /api/checkins/{id}/documentos` | corpo `{kitId?, identidadeSvg, carteirinhaSvg}`; lê e confere |
 | `POST /api/checkins/{id}/reenvio` | corpo `{identidadeSvg?, carteirinhaSvg?}`; com pendência de documento, confere de novo |
 | `POST /api/checkins/{id}/confirmar-guia` | paciente confirma a guia |
-| `POST /api/checkins/{id}/chegada` | registra a chegada e emite a senha (no apoio presencial, a senha de apoio) |
-| `POST /api/checkins/{id}/ajuda` | corpo `{motivo?}`; aciona apoio presencial no horário da visita (`horarioApoio`) |
+| `POST /api/checkins/{id}/chegada` | registra a chegada e emite a senha (no apoio presencial, a senha de apoio); só no dia da visita |
+| `POST /api/checkins/{id}/ajuda` | corpo `{motivo?}`; aciona apoio presencial no dia e horário da visita (`diaApoio`, `horarioApoio`) |
 | `POST /api/checkins/{id}/cancelar-ajuda` | o paciente desiste do apoio que pediu, antes de chegar, e volta para onde estava |
 | `GET /api/atendimento/casos` | todos os casos, na visão do atendente (com valores da base e histórico) |
 | `POST /api/atendimento/casos/{id}/resolver` | corpo `{atendente, observacao}`; libera o check-in |

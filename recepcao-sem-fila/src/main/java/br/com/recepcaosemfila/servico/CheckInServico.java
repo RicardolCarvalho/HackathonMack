@@ -14,6 +14,8 @@ import br.com.recepcaosemfila.dominio.TipoDocumento;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -75,7 +77,10 @@ public final class CheckInServico {
         return contas.porId(contaId).orElseThrow(() -> new RegraException(404, "Conta não encontrada."));
     }
 
-    /** Resumo da conta para a tela inicial do portal: quem é, a visita de hoje e os horários que dá para escolher. */
+    /**
+     * Resumo da conta para a tela inicial do portal: quem é, o que tem para agendar, a visita marcada (se já
+     * escolheu) e a agenda dos próximos dias. O local da visita não vai aqui: o paciente só o vê depois do check-in.
+     */
     public synchronized Map<String, Object> resumoConta(String contaId) {
         ContasSinteticas.Conta c = conta(contaId);
         LocalDate hoje = LocalDate.now(relogio);
@@ -86,54 +91,99 @@ public final class CheckInServico {
         m.put("nome", c.paciente().nome());
         m.put("primeiroNome", c.primeiroNome());
         m.put("kitId", c.kitId());
-        m.put("visitaHoje", contas.agendamentoDeHoje(c, hoje).map(a -> {
+        m.put("hoje", hoje);
+        m.put("servico", contas.pedido(c).map(BaseSintetica.Pedido::servico).orElse(null));
+        m.put("visita", contas.visita(c, hoje).map(a -> {
             Map<String, Object> v = new LinkedHashMap<>();
             v.put("data", a.data());
             v.put("horario", a.horario());
             v.put("servico", a.servico());
-            v.put("local", a.proximaEtapa());
-            v.put("horarioPassou", !LocalTime.parse(a.horario()).isAfter(agora));
+            v.put("horarioPassou", a.data().equals(hoje) && !LocalTime.parse(a.horario()).isAfter(agora));
             return v;
         }).orElse(null));
-        List<Map<String, Object>> horarios = new ArrayList<>();
-        for (BaseSintetica.Horario h : contas.horarios(c, hoje, agora)) {
-            Map<String, Object> hm = new LinkedHashMap<>();
-            hm.put("horario", h.horario());
-            hm.put("disponivel", h.disponivel());
-            hm.put("atual", h.atual());
-            horarios.add(hm);
+        List<Map<String, Object>> agenda = new ArrayList<>();
+        for (LocalDate dia : BaseSintetica.diasDaAgenda(hoje)) {
+            List<Map<String, Object>> horarios = new ArrayList<>();
+            for (BaseSintetica.Horario h : contas.horarios(c, dia, hoje, agora)) {
+                Map<String, Object> hm = new LinkedHashMap<>();
+                hm.put("horario", h.horario());
+                hm.put("disponivel", h.disponivel());
+                hm.put("atual", h.atual());
+                horarios.add(hm);
+            }
+            Map<String, Object> d = new LinkedHashMap<>();
+            d.put("data", dia);
+            d.put("horarios", horarios);
+            agenda.add(d);
         }
-        m.put("horarios", horarios);
+        m.put("agenda", agenda);
         return m;
     }
 
     /**
-     * O paciente escolhe outro horário livre para a visita de hoje (agenda sintética do mesmo serviço).
-     * Um check-in em aberto da conta passa a usar o novo horário.
+     * O paciente marca (ou troca) o dia e o horário da visita, entre hoje e os próximos dias da agenda sintética do
+     * serviço do pedido dele. Um check-in em aberto da conta passa a usar a nova visita.
      */
-    public synchronized Map<String, Object> remarcar(String contaId, String horario) {
+    public synchronized Map<String, Object> agendar(String contaId, String dia, String horario) {
         ContasSinteticas.Conta conta = conta(contaId);
         LocalDate hoje = LocalDate.now(relogio);
+        LocalDate data;
+        try {
+            data = LocalDate.parse(dia == null ? "" : dia.trim());
+        } catch (DateTimeParseException e) {
+            throw new RegraException(400, "Dia inválido (use AAAA-MM-DD).");
+        }
+        if (!BaseSintetica.diasDaAgenda(hoje).contains(data)) {
+            throw new RegraException(400, "Dia fora da agenda: escolha entre hoje e os próximos "
+                    + (BaseSintetica.DIAS_DA_AGENDA - 1) + " dias.");
+        }
         String escolhido = horario == null ? "" : horario.trim();
-        BaseSintetica.Horario h = contas.horarios(conta, hoje, LocalTime.now(relogio)).stream()
+        BaseSintetica.Horario h = contas.horarios(conta, data, hoje, LocalTime.now(relogio)).stream()
                 .filter(x -> x.horario().equals(escolhido)).findFirst()
-                .orElseThrow(() -> new RegraException(400, "Horário indisponível: fora da agenda de hoje ou já passou."));
+                .orElseThrow(() -> new RegraException(400, "Horário indisponível: fora da agenda desse dia ou já passou."));
         if (!h.atual()) {
             if (!h.disponivel()) throw new RegraException(409, "Esse horário acabou de ser ocupado. Escolha outro.");
-            Agendamento novo = contas.remarcar(conta, hoje, escolhido);
+            exigirValidadeAte(conta, data);
+            Agendamento novo = contas.agendar(conta, data, escolhido);
+            String quando = data.format(DIA) + " às " + escolhido;
             for (CheckIn c : checkIns.values()) {
                 if (conta.id().equals(c.contaId) && c.status != CONCLUIDO) {
                     if (c.agendamento != null) c.agendamento = novo;
                     String apoio = "";
                     if (c.status == APOIO_PRESENCIAL) {
+                        c.diaApoio = data;
                         c.horarioApoio = escolhido;
-                        apoio = " O atendimento no balcão passa para o mesmo horário.";
+                        apoio = " O atendimento no balcão passa para o mesmo dia e horário.";
                     }
-                    evento(c, "PACIENTE", "Trocou o horário da visita para " + escolhido + "." + apoio);
+                    evento(c, "PACIENTE", "Trocou a visita para " + quando + "." + apoio);
                 }
             }
         }
         return resumoConta(contaId);
+    }
+
+    private static final DateTimeFormatter DIA = DateTimeFormatter.ofPattern("dd/MM");
+    private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    /**
+     * Um check-in que já passou pela conferência foi validado para o dia da visita de então. Trocar para um dia em
+     * que a guia ou a carteirinha já venceram não é aceito: o paciente escolhe outro dia ou fala com uma pessoa.
+     */
+    private void exigirValidadeAte(ContasSinteticas.Conta conta, LocalDate dia) {
+        for (CheckIn c : checkIns.values()) {
+            if (!conta.id().equals(c.contaId) || c.status == CONCLUIDO || c.agendamento == null) continue;
+            LocalDate guia = c.guia == null ? null : c.guia.validade();
+            LocalDate carteirinha = c.carteirinhaLida == null ? null
+                    : Conferencia.data(c.carteirinhaLida.campo(LeitorDocumento.VALIDADE));
+            if (guia != null && guia.isBefore(dia)) {
+                throw new RegraException(409, "A guia do convênio vence em " + guia.format(DATA_BR)
+                        + ", antes desse dia. Escolha um dia até lá ou fale com uma pessoa.");
+            }
+            if (carteirinha != null && carteirinha.isBefore(dia)) {
+                throw new RegraException(409, "A carteirinha vence em " + carteirinha.format(DATA_BR)
+                        + ", antes desse dia. Escolha um dia até lá ou fale com uma pessoa.");
+            }
+        }
     }
 
     // ---------- Ações do paciente ----------
@@ -144,6 +194,10 @@ public final class CheckInServico {
 
     public synchronized CheckIn iniciar(String contaId) {
         ContasSinteticas.Conta conta = contaId == null ? null : conta(contaId);
+        Agendamento visita = conta == null ? null : contas.visita(conta, LocalDate.now(relogio)).orElse(null);
+        if (conta != null && visita == null) {
+            throw new RegraException(409, "Escolha o dia e o horário da visita antes de começar o check-in.");
+        }
         CheckIn c = new CheckIn(UUID.randomUUID().toString(), relogio.instant());
         if (conta != null) {
             c.contaId = conta.id();
@@ -151,10 +205,9 @@ public final class CheckInServico {
             c.titular = conta.paciente();
         }
         checkIns.put(c.id, c);
-        String visita = conta == null ? "" : contas.agendamentoDeHoje(conta, LocalDate.now(relogio))
-                .map(a -> " Visita de hoje às " + a.horario() + ".").orElse("");
         evento(c, "PACIENTE", conta == null ? "Check-in iniciado."
-                : "Check-in iniciado pela conta " + conta.email() + " (login simulado)." + visita);
+                : "Check-in iniciado pela conta " + conta.email() + " (login simulado). Visita marcada para "
+                + visita.data().format(DIA) + " às " + visita.horario() + ".");
         return c;
     }
 
@@ -289,12 +342,14 @@ public final class CheckInServico {
         CheckIn c = buscar(id);
         if (c.status == APOIO_PRESENCIAL) {
             if (c.senha != null) throw new RegraException(409, "A chegada já foi registrada. Senha de apoio " + c.senha + ".");
+            exigirDiaDaVisita(c.diaApoio);
             c.senha = String.format("P-%03d", ++senhasApoio);
             evento(c, "PACIENTE", "Chegou ao hospital para o apoio no balcão"
                     + (c.horarioApoio == null ? "" : " marcado às " + c.horarioApoio) + ". Senha de apoio " + c.senha + ".");
             return c;
         }
         exigir(c, PRONTO_PARA_CHEGADA);
+        exigirDiaDaVisita(c.agendamento == null ? null : c.agendamento.data());
         c.status = CONCLUIDO;
         c.concluidoEm = relogio.instant();
         c.senha = String.format("A-%03d", ++senhasFluxo);
@@ -309,12 +364,12 @@ public final class CheckInServico {
         c.ajudaPedidaPeloPaciente = true;
         c.statusAntesDaAjuda = c.status;
         c.status = APOIO_PRESENCIAL;
-        c.horarioApoio = horarioDoApoio(c);
+        marcarApoio(c);
         desfecho(c, Desfecho.APOIO_PRESENCIAL_A_PEDIDO);
         String texto = motivo == null || motivo.isBlank() ? "sem motivo informado" : motivo.trim();
         c.motivos.add(MOTIVO_AJUDA + texto + ".");
         evento(c, "PACIENTE", "Pediu apoio presencial (" + texto + "). Atendimento no balcão "
-                + quandoNoBalcao(c.horarioApoio) + ". " + SENHA_NA_CHEGADA);
+                + quandoNoBalcao(c) + ". " + SENHA_NA_CHEGADA);
         return c;
     }
 
@@ -335,6 +390,7 @@ public final class CheckInServico {
         c.statusAntesDaAjuda = null;
         c.ajudaPedidaPeloPaciente = false;
         c.horarioApoio = null;
+        c.diaApoio = null;
         c.motivos.removeIf(m -> m.startsWith(MOTIVO_AJUDA));
         if (c.desfechoInicial == Desfecho.APOIO_PRESENCIAL_A_PEDIDO) {
             c.desfechoInicial = null;
@@ -347,23 +403,33 @@ public final class CheckInServico {
     private static final String MOTIVO_AJUDA = "Paciente pediu ajuda de uma pessoa: ";
 
     /**
-     * O apoio presencial fica marcado para o horário da visita de hoje, não para o momento do pedido.
-     * Sem visita hoje, ou se o horário já passou, é assim que o paciente chegar (null).
+     * O apoio presencial fica marcado para o dia e o horário da visita, não para o momento do pedido.
+     * Sem visita marcada, ou se o horário de hoje já passou, é assim que o paciente chegar (dia e horário null).
      * Fonte: agenda sintética (pela conta; sem conta, o agendamento achado na conferência).
      */
-    private String horarioDoApoio(CheckIn c) {
+    private void marcarApoio(CheckIn c) {
         LocalDate hoje = LocalDate.now(relogio);
         Agendamento a = c.contaId != null
-                ? contas.agendamentoDeHoje(conta(c.contaId), hoje).orElse(null)
-                : c.agendamento != null && c.agendamento.data().equals(hoje) ? c.agendamento : null;
-        if (a == null || !LocalTime.parse(a.horario()).isAfter(LocalTime.now(relogio))) return null;
-        return a.horario();
+                ? contas.visita(conta(c.contaId), hoje).orElse(null)
+                : c.agendamento != null && !c.agendamento.data().isBefore(hoje) ? c.agendamento : null;
+        boolean aindaVem = a != null && (a.data().isAfter(hoje) || LocalTime.parse(a.horario()).isAfter(LocalTime.now(relogio)));
+        c.diaApoio = aindaVem ? a.data() : null;
+        c.horarioApoio = aindaVem ? a.horario() : null;
     }
 
     private static final String SENHA_NA_CHEGADA = "A senha de apoio sai quando o paciente confirmar a chegada ao hospital.";
 
-    private static String quandoNoBalcao(String horario) {
-        return horario == null ? "assim que chegar (sem horário de visita à frente hoje)" : "às " + horario + ", horário da visita";
+    private String quandoNoBalcao(CheckIn c) {
+        if (c.horarioApoio == null) return "assim que chegar (sem horário de visita à frente)";
+        boolean hoje = c.diaApoio.equals(LocalDate.now(relogio));
+        return (hoje ? "hoje" : "em " + c.diaApoio.format(DIA)) + " às " + c.horarioApoio + ", horário da visita";
+    }
+
+    /** A chegada (e a senha) só vale no dia da visita marcada. */
+    private void exigirDiaDaVisita(LocalDate dia) {
+        if (dia != null && !dia.equals(LocalDate.now(relogio))) {
+            throw new RegraException(409, "A chegada só pode ser confirmada no dia da visita (" + dia.format(DIA) + ").");
+        }
     }
 
     // ---------- Ações do atendimento (sempre com nome e observação) ----------
@@ -384,8 +450,8 @@ public final class CheckInServico {
         exigirRegistro(atendente, observacao);
         c.status = APOIO_PRESENCIAL;
         c.atendidoPor = atendente.trim();
-        c.horarioApoio = horarioDoApoio(c);
-        evento(c, "ATENDENTE " + c.atendidoPor, "Encaminhado ao apoio presencial, no balcão " + quandoNoBalcao(c.horarioApoio)
+        marcarApoio(c);
+        evento(c, "ATENDENTE " + c.atendidoPor, "Encaminhado ao apoio presencial, no balcão " + quandoNoBalcao(c)
                 + ". " + SENHA_NA_CHEGADA + " Observação: " + observacao.trim());
         return c;
     }

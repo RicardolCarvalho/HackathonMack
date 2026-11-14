@@ -6,6 +6,7 @@ import br.com.recepcaosemfila.dados.KitsFicticios;
 import br.com.recepcaosemfila.dominio.CheckIn;
 import br.com.recepcaosemfila.dominio.Desfecho;
 import br.com.recepcaosemfila.dominio.DocumentoLido;
+import br.com.recepcaosemfila.dominio.Guia;
 import br.com.recepcaosemfila.dominio.Paciente;
 import br.com.recepcaosemfila.dominio.ResultadoVerificacao;
 import br.com.recepcaosemfila.dominio.StatusCheckIn;
@@ -44,10 +45,10 @@ public final class VerificaCenarios {
         teste("Arquivo que não é documento fictício SVG é encaminhado, não aprovado", VerificaCenarios::arquivoInvalido);
         teste("Transições inválidas são recusadas", VerificaCenarios::transicoesInvalidas);
         teste("Métricas refletem só o que aconteceu na execução", VerificaCenarios::metricas);
-        teste("Conta: login simulado e resumo com a visita de hoje", VerificaCenarios::contaLogin);
+        teste("Conta: login simulado e resumo da conta", VerificaCenarios::contaLogin);
         teste("Leitura de um documento mostra o que foi extraído, sem conferir", VerificaCenarios::leituraDocumento);
         teste("Conta: documento do titular conclui; de outra pessoa é encaminhado", VerificaCenarios::contaTitular);
-        teste("Horário: paciente escolhe um horário livre de hoje", VerificaCenarios::horarioDaVisita);
+        teste("Agenda: paciente começa sem horário e escolhe o dia e o horário da visita", VerificaCenarios::horarioDaVisita);
         teste("Reenvio: carteirinha vencida é trocada pelo paciente e o check-in segue", VerificaCenarios::reenvioResolve);
         teste("Reenvio: só para pendência de documento e com limite", VerificaCenarios::reenvioLimites);
         teste("Apoio presencial fica marcado para o horário da visita, não para a hora do pedido", VerificaCenarios::apoioNoHorarioDaVisita);
@@ -210,8 +211,9 @@ public final class VerificaCenarios {
         igual("Ana", conta.primeiroNome());
 
         Map<String, Object> resumo = servico.resumoConta(conta.id());
-        verdade(resumo.get("visitaHoje") != null);
+        verdade(resumo.get("visita") != null);
         verdade(!Json.texto(resumo).contains("G-2026")); // a guia não aparece antes da conferência
+        verdade(!Json.texto(resumo).contains("Triagem")); // nem o local da visita
 
         CheckIn c = servico.iniciar(conta.id());
         igual(conta.email(), c.contaEmail);
@@ -268,39 +270,67 @@ public final class VerificaCenarios {
 
     @SuppressWarnings("unchecked")
     private static void horarioDaVisita() {
-        // Relógio fixo às 08:10 para o teste não depender da hora em que roda.
+        // Base sem visitas marcadas (como na demo) e relógio fixo às 08:10.
         LocalDate hoje = LocalDate.now();
-        ZoneId zona = ZoneId.systemDefault();
-        Clock oitoEDez = Clock.fixed(hoje.atTime(8, 10).atZone(zona).toInstant(), zona);
         BaseSintetica base = new BaseSintetica(hoje);
         KitsFicticios k = new KitsFicticios(hoje);
-        CheckInServico s = new CheckInServico(oitoEDez, new LeitorSvgSimulado(), new Conferencia(base), k, new ContasSinteticas(base));
+        CheckInServico s = new CheckInServico(relogio(hoje, 8, 10), new LeitorSvgSimulado(), new Conferencia(base), k, new ContasSinteticas(base));
 
+        // Ninguém começa com horário: o paciente vê o que tem para agendar, sem o local, e a agenda de 7 dias.
         ContasSinteticas.Conta ana = s.entrar("ana.beatriz@exemplo.test", ContasSinteticas.SENHA_DEMO);
-        List<Map<String, Object>> hs = (List<Map<String, Object>>) s.resumoConta(ana.id()).get("horarios");
-        verdade(hs.stream().noneMatch(h -> h.get("horario").equals("08:00")));   // já passou
-        igual(true, horario(hs, "10:30").get("atual"));
-        igual(false, horario(hs, "09:00").get("disponivel"));                    // ocupado por outro paciente fictício
-        igual(false, horario(hs, "11:30").get("disponivel"));                    // é o horário da Marina (mesmo serviço)
-        igual(true, horario(hs, "14:30").get("disponivel"));
+        Map<String, Object> resumo = s.resumoConta(ana.id());
+        igual(null, resumo.get("visita"));
+        igual("Consulta eletiva", resumo.get("servico"));
+        verdade(!Json.texto(resumo).contains("Triagem"));
+        igual(BaseSintetica.DIAS_DA_AGENDA, ((List<?>) resumo.get("agenda")).size());
+        verdade(horariosDoDia(resumo, 0).stream().noneMatch(h -> h.get("horario").equals("08:00"))); // já passou hoje
+        List<Map<String, Object>> amanha = horariosDoDia(resumo, 1);
+        igual(BaseSintetica.GRADE.size(), amanha.size());                                            // amanhã: grade inteira
+        recusa(409, () -> s.iniciar(ana.id()));                                                      // sem visita, sem check-in
 
-        recusa(409, () -> s.remarcar(ana.id(), "11:30"));
-        recusa(400, () -> s.remarcar(ana.id(), "07:30"));
-        recusa(400, () -> s.remarcar(ana.id(), "10:45"));
+        String dia = hoje.plusDays(1).toString();
+        String livre = primeiroLivre(amanha);
+        String ocupado = amanha.stream().filter(h -> Boolean.FALSE.equals(h.get("disponivel")))
+                .map(h -> (String) h.get("horario")).findFirst().orElseThrow();
+        recusa(409, () -> s.agendar(ana.id(), dia, ocupado));
+        recusa(400, () -> s.agendar(ana.id(), hoje.plusDays(BaseSintetica.DIAS_DA_AGENDA).toString(), livre)); // fora da agenda
+        recusa(400, () -> s.agendar(ana.id(), hoje.minusDays(1).toString(), livre));
+        recusa(400, () -> s.agendar(ana.id(), hoje.toString(), "07:30"));                            // já passou
+        recusa(400, () -> s.agendar(ana.id(), dia, "10:45"));                                        // fora da grade
+        recusa(400, () -> s.agendar(ana.id(), "amanhã", livre));
 
-        CheckIn c = s.iniciar(ana.id());
-        Map<String, Object> r = s.remarcar(ana.id(), "14:30");
-        igual("14:30", ((Map<String, Object>) r.get("visitaHoje")).get("horario"));
-        verdade(c.eventos.stream().anyMatch(e -> e.descricao().contains("14:30")));
-        s.enviarDocumentos(c.id, "ana", k.svgIdentidade(k.kit("ana")), k.svgCarteirinha(k.kit("ana")));
-        igual("14:30", c.agendamento.horario());
+        Map<String, Object> r = s.agendar(ana.id(), dia, livre);
+        Map<String, Object> visita = (Map<String, Object>) r.get("visita");
+        igual(hoje.plusDays(1), visita.get("data"));
+        igual(livre, visita.get("horario"));
+        igual(true, horario(horariosDoDia(r, 1), livre).get("atual"));
+        verdade(!Json.texto(r).contains("Triagem"));
 
-        // O 10:30 liberado fica livre para quem é do mesmo serviço.
+        // Quem é do mesmo serviço vê o horário ocupado.
         ContasSinteticas.Conta marina = s.entrar("marina.castro@exemplo.test", ContasSinteticas.SENHA_DEMO);
-        igual(true, horario((List<Map<String, Object>>) s.resumoConta(marina.id()).get("horarios"), "10:30").get("disponivel"));
+        igual(false, horario(horariosDoDia(s.resumoConta(marina.id()), 1), livre).get("disponivel"));
 
+        // Check-in antecipado de uma visita de amanhã: a conferência vale; a chegada só no dia da visita.
+        CheckIn c = s.iniciar(ana.id());
+        s.enviarDocumentos(c.id, "ana", k.svgIdentidade(k.kit("ana")), k.svgCarteirinha(k.kit("ana")));
+        igual(StatusCheckIn.AGUARDANDO_CONFIRMACAO_GUIA, c.status);
+        igual(hoje.plusDays(1), c.agendamento.data());
+        s.confirmarGuia(c.id);
+        recusa(409, () -> s.registrarChegada(c.id));
+
+        // Depois da conferência, trocar para um dia em que a guia já venceu é recusado; dentro da validade, vale.
+        Guia g = c.guia;
+        c.guia = new Guia(g.numero(), g.agendamentoId(), g.numeroCarteirinha(), g.procedimento(), g.status(), hoje.plusDays(2));
+        String depois = hoje.plusDays(3).toString();
+        recusa(409, () -> s.agendar(ana.id(), depois, primeiroLivre(horariosDoDia(s.resumoConta(ana.id()), 3))));
+        igual(hoje.plusDays(1), c.agendamento.data());
+        String dois = hoje.plusDays(2).toString();
+        s.agendar(ana.id(), dois, primeiroLivre(horariosDoDia(s.resumoConta(ana.id()), 2)));
+        igual(hoje.plusDays(2), c.agendamento.data());
+
+        // Zerar a demo apaga os horários marcados.
         s.reiniciar();
-        igual("10:30", ((Map<String, Object>) s.resumoConta(ana.id()).get("visitaHoje")).get("horario"));
+        igual(null, s.resumoConta(ana.id()).get("visita"));
     }
 
     private static Map<String, Object> horario(List<Map<String, Object>> hs, String h) {
@@ -367,6 +397,7 @@ public final class VerificaCenarios {
     private static void apoioNoHorarioDaVisita() {
         LocalDate hoje = LocalDate.now();
         BaseSintetica base = new BaseSintetica(hoje);
+        agendaDeHoje(base, hoje);
         KitsFicticios k = new KitsFicticios(hoje);
         CheckInServico s = new CheckInServico(relogio(hoje, 8, 10), new LeitorSvgSimulado(), new Conferencia(base), k, new ContasSinteticas(base));
 
@@ -375,11 +406,15 @@ public final class VerificaCenarios {
         CheckIn c = s.iniciar(ana.id());
         s.pedirAjuda(c.id, "Prefiro falar com alguém");
         igual("10:30", c.horarioApoio);
+        igual(hoje, c.diaApoio);
         igual("10:30", c.paraMapa(false).get("horarioApoio"));
-        verdade(c.eventos.stream().anyMatch(e -> e.descricao().contains("às 10:30, horário da visita")));
-        // Trocar o horário da visita leva o apoio junto.
-        s.remarcar(ana.id(), "14:30");
-        igual("14:30", c.horarioApoio);
+        verdade(c.eventos.stream().anyMatch(e -> e.descricao().contains("hoje às 10:30, horário da visita")));
+        // Trocar a visita para outro dia leva o apoio junto; a chegada só vale nesse dia.
+        String livre = primeiroLivre(horariosDoDia(s.resumoConta(ana.id()), 2));
+        s.agendar(ana.id(), hoje.plusDays(2).toString(), livre);
+        igual(hoje.plusDays(2), c.diaApoio);
+        igual(livre, c.horarioApoio);
+        recusa(409, () -> s.registrarChegada(c.id));
 
         // Encaminhado pelo atendimento: também no horário da visita (Carlos, 11:00).
         ContasSinteticas.Conta carlos = s.entrar("carlos.eduardo@exemplo.test", ContasSinteticas.SENHA_DEMO);
@@ -390,6 +425,7 @@ public final class VerificaCenarios {
 
         // Visita que já passou: o apoio é assim que o paciente chegar.
         BaseSintetica base2 = new BaseSintetica(hoje);
+        agendaDeHoje(base2, hoje);
         CheckInServico noite = new CheckInServico(relogio(hoje, 19, 50), new LeitorSvgSimulado(), new Conferencia(base2), k, new ContasSinteticas(base2));
         CheckIn e = noite.iniciar(noite.entrar("ana.beatriz@exemplo.test", ContasSinteticas.SENHA_DEMO).id());
         noite.pedirAjuda(e.id, null);
@@ -426,6 +462,26 @@ public final class VerificaCenarios {
         servico.encaminharPresencial(tereza.id, "Bia", "Conferir o original no balcão.");
         recusa(409, () -> servico.cancelarAjuda(tereza.id));
         recusa(409, () -> servico.cancelarAjuda(ana.id)); // não está no apoio presencial
+    }
+
+    /** Visitas de hoje para os cinco pacientes fictícios (como se cada um já tivesse escolhido o horário). */
+    private static void agendaDeHoje(BaseSintetica base, LocalDate hoje) {
+        base.agendar("P1", hoje, "10:30");
+        base.agendar("P2", hoje, "11:00");
+        base.agendar("P3", hoje, "11:30");
+        base.agendar("P4", hoje, "14:00");
+        base.agendar("P5", hoje, "15:30");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> horariosDoDia(Map<String, Object> resumo, int dia) {
+        List<Map<String, Object>> agenda = (List<Map<String, Object>>) resumo.get("agenda");
+        return (List<Map<String, Object>>) agenda.get(dia).get("horarios");
+    }
+
+    private static String primeiroLivre(List<Map<String, Object>> hs) {
+        return hs.stream().filter(h -> Boolean.TRUE.equals(h.get("disponivel"))).map(h -> (String) h.get("horario"))
+                .findFirst().orElseThrow(() -> new AssertionError("nenhum horário livre"));
     }
 
     private static Clock relogio(LocalDate dia, int hora, int minuto) {
@@ -482,11 +538,13 @@ public final class VerificaCenarios {
     }
 
     private static void teste(String nome, Runnable corpo) {
-        Clock relogio = Clock.systemDefaultZone();
-        LocalDate hoje = LocalDate.now(relogio);
+        // Relógio fixo às 08:00 de hoje e todos os pacientes com visita marcada para hoje, para os cenários
+        // não dependerem da hora em que o teste roda. Os testes de agenda montam a base sem visitas.
+        LocalDate hoje = LocalDate.now();
         kits = new KitsFicticios(hoje);
         BaseSintetica base = new BaseSintetica(hoje);
-        servico = new CheckInServico(relogio, new LeitorSvgSimulado(), new Conferencia(base), kits, new ContasSinteticas(base));
+        agendaDeHoje(base, hoje);
+        servico = new CheckInServico(relogio(hoje, 8, 0), new LeitorSvgSimulado(), new Conferencia(base), kits, new ContasSinteticas(base));
         try {
             corpo.run();
             ok++;

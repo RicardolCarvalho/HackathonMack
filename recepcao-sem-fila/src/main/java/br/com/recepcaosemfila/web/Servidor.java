@@ -113,8 +113,9 @@ public final class Servidor {
             json(ex, 200, servico.resumoConta(p[2]));
             return;
         }
-        if (post && p.length == 4 && p[1].equals("contas") && p[3].equals("horario")) {
-            json(ex, 200, servico.remarcar(p[2], texto(corpo(ex), "horario")));
+        if (post && p.length == 4 && p[1].equals("contas") && p[3].equals("agendamento")) {
+            Map<String, Object> corpo = corpo(ex);
+            json(ex, 200, servico.agendar(p[2], texto(corpo, "dia"), texto(corpo, "horario")));
             return;
         }
 

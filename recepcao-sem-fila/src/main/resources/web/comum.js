@@ -78,6 +78,47 @@ function dataBr(iso) {
   return d + '/' + m + '/' + a;
 }
 
+// ---------- Dias da agenda (datas AAAA-MM-DD, sem fuso) ----------
+
+const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+function dataLocal(iso) {
+  const [a, m, d] = iso.split('-').map(Number);
+  return new Date(a, m - 1, d);
+}
+
+function hojeLocal() {
+  const d = new Date();
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+}
+
+/** "18/11". */
+function diaMes(iso) {
+  const [, m, d] = iso.split('-');
+  return d + '/' + m;
+}
+
+/** "Hoje", "Amanhã" ou o dia da semana ("qua"). */
+function nomeDoDia(iso, hoje) {
+  const n = Math.round((dataLocal(iso) - dataLocal(hoje || hojeLocal())) / 86400000);
+  if (n === 0) return 'Hoje';
+  if (n === 1) return 'Amanhã';
+  return DIAS_SEMANA[dataLocal(iso).getDay()];
+}
+
+/** "Hoje", "Amanhã" ou "qua, 18/11". */
+function rotuloDia(iso, hoje) {
+  const nome = nomeDoDia(iso, hoje);
+  return nome === 'Hoje' || nome === 'Amanhã' ? nome : `${nome}, ${diaMes(iso)}`;
+}
+
+/** "hoje às 15:00", "amanhã às 15:00" ou "qua, 18/11, às 15:00". */
+function quando(iso, horario, hoje) {
+  const nome = nomeDoDia(iso, hoje);
+  const dia = nome === 'Hoje' || nome === 'Amanhã' ? nome.toLowerCase() : `${nome}, ${diaMes(iso)},`;
+  return `${dia} às ${horario}`;
+}
+
 const ROTULO_STATUS = {
   AGUARDANDO_DOCUMENTOS: 'Aguardando documentos',
   AGUARDANDO_CONFIRMACAO_GUIA: 'Aguardando confirmação da guia',

@@ -71,8 +71,9 @@ function desenharCasos() {
 
   const atual = ABAS.find((a) => a.id === aba);
   const lista = casos.filter(atual.filtro);
-  // No apoio presencial, a ordem é a do horário marcado no balcão ("assim que chegar" primeiro).
-  if (aba === 'presencial') lista.sort((a, b) => (a.horarioApoio || '').localeCompare(b.horarioApoio || ''));
+  // No apoio presencial, a ordem é a do dia e do horário marcados no balcão ("assim que chegar" primeiro).
+  const chaveBalcao = (c) => (c.diaApoio || '') + ' ' + (c.horarioApoio || '');
+  if (aba === 'presencial') lista.sort((a, b) => chaveBalcao(a).localeCompare(chaveBalcao(b)));
   document.getElementById('casos').replaceChildren(
     ...(lista.length ? lista.map(cartaoCaso) : [el('div', { class: 'vazio' }, atual.vazio)]));
 }
@@ -93,11 +94,12 @@ function cartaoCaso(c) {
   const senha = c.senha
     ? el('div', { class: 'senha-caso' }, el('span', { class: 'rotulo-senha' }, 'Senha'), el('strong', {}, c.senha))
     : null;
-  // Apoio presencial: horário marcado no balcão (o da visita) e se o paciente já confirmou a chegada.
+  // Apoio presencial: dia e horário marcados no balcão (os da visita) e se o paciente já confirmou a chegada.
   const balcao = c.status === 'APOIO_PRESENCIAL'
     ? el('div', { class: 'balcao-caso' },
       el('span', { class: 'rotulo-senha' }, 'Balcão'),
       el('strong', {}, c.horarioApoio || 'ao chegar'),
+      c.diaApoio ? el('span', { class: 'pequeno' }, rotuloDia(c.diaApoio)) : null,
       c.senha ? null : el('span', { class: 'suave pequeno' }, 'aguardando chegada'))
     : null;
 
@@ -130,7 +132,7 @@ function botoes(c) {
   if (c.status === 'APOIO_PRESENCIAL') {
     if (!c.senha) {
       return el('p', { class: 'pequeno suave' },
-        `Aguardando o paciente confirmar a chegada ao hospital${c.horarioApoio ? ` (balcão marcado às ${c.horarioApoio})` : ''}. A senha de apoio sai na chegada; depois disso dá para registrar o atendimento.`);
+        `Aguardando o paciente confirmar a chegada ao hospital${c.horarioApoio && c.diaApoio ? ` (balcão marcado para ${quando(c.diaApoio, c.horarioApoio)})` : ''}. A senha de apoio sai na chegada; depois disso dá para registrar o atendimento.`);
     }
     return el('div', { class: 'acoes' },
       el('button', { onclick: () => abrirAcao(c, 'concluir-presencial') }, 'Registrar atendimento presencial'));
