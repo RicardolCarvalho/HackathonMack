@@ -44,6 +44,7 @@ async function executar(acao) {
   }
   ocupado = false;
   desenhar();
+  window.scrollTo({ top: 0 });
 }
 
 const entrar = (email, senha) => executar(async () => {
@@ -572,6 +573,24 @@ function telaPresencial() {
       nota('O que você já enviou está com a recepção. Esta tela atualiza sozinha.', 'relogio')),
   ];
 }
+
+// ---------- O que foi conferido ----------
+
+const GRUPOS_CONFERENCIA = [
+  { titulo: 'Documentos enviados', codigos: ['LEITURA_IDENTIDADE', 'LEITURA_CARTEIRINHA', 'IDENTIDADE_SIMULADA'] },
+  { titulo: 'Seus dados no cadastro', codigos: ['CADASTRO_LOCALIZADO', 'NOME', 'NASCIMENTO', 'CARTEIRINHA'] },
+  { titulo: 'Atendimento de hoje', codigos: ['AGENDAMENTO', 'GUIA'] },
+];
+
+const RESUMO_RESULTADO = {
+  OK: ['confere', 'conferem'],
+  DIVERGENTE: ['divergente', 'divergentes'],
+  AUSENTE: ['dado ausente', 'dados ausentes'],
+  SIMULADO: ['simulado', 'simulados'],
+  NAO_AVALIADO: ['não avaliado', 'não avaliados'],
+};
+
+const falhou = (v) => v.resultado === 'DIVERGENTE' || v.resultado === 'AUSENTE';
 
 function quadroConferencia() {
   const ok = checkIn.verificacoes.filter((v) => v.resultado === 'OK').length;
